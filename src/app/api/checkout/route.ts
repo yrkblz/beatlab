@@ -40,7 +40,7 @@ export async function POST(req: Request) {
         userEmail: userEmail || '',
         plan: 'lifetime',
       },
-      success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}&user_id=${encodeURIComponent(userId || '')}`,
       cancel_url: `${origin}/upgrade?canceled=true`,
     });
 
