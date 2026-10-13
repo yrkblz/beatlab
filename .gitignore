@@ -39,3 +39,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+
+# temporary scratch scripts
+*.py
+*.html
+test-*.js
+fix_*.js
+update_*.js
+check_*.js
+clean_*.js
+add_modal.js
+beautify_settings.js
+match_height.js
+merge_settings.js
+remove_scroll.js
+replace_confirm.js
+replace_select.js
+restore.js
