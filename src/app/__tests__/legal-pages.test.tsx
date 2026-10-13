@@ -59,7 +59,7 @@ describe('Legal Compliance Pages and Footer Links', () => {
       expect(screen.getByRole('heading', { name: /5\. Beat License Generation & Legal Disclaimers/i })).toBeInTheDocument();
       expect(screen.getByText(/BeatHelper is a software provider and not a law firm/i)).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: /13\. Contact Information/i })).toBeInTheDocument();
-      expect(screen.getByText(/legal@beathelper\.com/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/beatlab\.space@gmail\.com/i).length).toBeGreaterThan(0);
     });
 
     it('renders navigation tabs and back to home link', () => {
@@ -92,7 +92,7 @@ describe('Legal Compliance Pages and Footer Links', () => {
       expect(screen.getByRole('heading', { name: /3\. Google API Services User Data Policy Compliance/i })).toBeInTheDocument();
       expect(screen.getByText(/Google Limited Use Disclosure/i)).toBeInTheDocument();
       expect(screen.getByText(/We do NOT use Google user data to train generalized artificial intelligence/i)).toBeInTheDocument();
-      expect(screen.getAllByText(/privacy@beathelper\.com/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/beatlab\.space@gmail\.com/i).length).toBeGreaterThan(0);
     });
 
     it('renders navigation tabs pointing to other legal routes', () => {

@@ -150,8 +150,8 @@ export default function CookiePolicyPage() {
         </p>
         <div className="p-4 rounded-xl border border-gray-200 bg-gray-50/80 text-sm text-gray-700">
           <p className="font-semibold text-gray-900">BeatHelper Inc. — Privacy &amp; Data Compliance</p>
-          <p>Email: <a href="mailto:privacy@beathelper.com" className="text-black underline font-medium">privacy@beathelper.com</a></p>
-          <p>Legal: <a href="mailto:legal@beathelper.com" className="text-black underline font-medium">legal@beathelper.com</a></p>
+          <p>Email: <a href="mailto:beatlab.space@gmail.com" className="text-black underline font-medium">beatlab.space@gmail.com</a></p>
+          <p>Legal: <a href="mailto:beatlab.space@gmail.com" className="text-black underline font-medium">beatlab.space@gmail.com</a></p>
         </div>
       </section>
     </LegalLayout>

@@ -259,22 +259,22 @@ export default function CRMPage() {
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
                 <Trash2 size={24} className="text-red-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Usuń kontakt</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Contact</h3>
               <p className="text-gray-500 text-sm mb-6">
-                Czy na pewno chcesz usunąć ten kontakt z tablicy? Tej operacji nie można cofnąć.
+                Are you sure you want to remove this contact from your board? This action cannot be undone.
               </p>
               <div className="flex space-x-3 w-full">
                 <button 
                   onClick={() => setDeleteConfirmId(null)} 
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2.5 rounded-xl transition-colors"
                 >
-                  Anuluj
+                  Cancel
                 </button>
                 <button 
                   onClick={confirmDelete} 
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2.5 rounded-xl transition-colors"
                 >
-                  Tak, usuń
+                  Yes, delete
                 </button>
               </div>
             </div>

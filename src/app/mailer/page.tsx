@@ -5,10 +5,10 @@ import { Mail, Send, Users, LogIn, LogOut, Music2, HardDrive, Paperclip, CheckCi
 import { supabase } from '@/lib/supabase';
 
 export default function MailerPage() {
-  const [activeTab, setActiveTab] = useState<'wysylka' | 'statystyki'>('wysylka');
+  const [activeTab, setActiveTab] = useState<'send' | 'stats'>('send');
   const [session, setSession] = useState<any>(null);
 
-  // Zmienne Formularza
+  // Form State
   const [emails, setEmails] = useState('');
   const [campaignName, setCampaignName] = useState('');
   const [subject, setSubject] = useState('');
@@ -24,18 +24,18 @@ export default function MailerPage() {
   // Google Drive
   const [driveFiles, setDriveFiles] = useState<any[]>([]);
   const [loadingDrive, setLoadingDrive] = useState(false);
-  const [driveHistory, setDriveHistory] = useState<{id: string, name: string}[]>([{id: 'root', name: 'Mój Dysk'}]);
+  const [driveHistory, setDriveHistory] = useState<{id: string, name: string}[]>([{id: 'root', name: 'My Drive'}]);
 
-  // Statystyki
+  // Campaign Statistics
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
 
-  // Zaznaczanie i usuwanie kampanii
+  // Campaign Selection and Deletion
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
-  const [deleteConfirmIds, setDeleteConfirmIds] = useState<string[] | null>(null); // State dla Modala
+  const [deleteConfirmIds, setDeleteConfirmIds] = useState<string[] | null>(null); // State for delete modal
   
-  // State dla 10-sekundowego undo
+  // State for 10-second undo
   const [pendingDelete, setPendingDelete] = useState<{ ids: string[], backup: any[] } | null>(null);
   const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
 
@@ -62,12 +62,12 @@ export default function MailerPage() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'statystyki') {
+    if (activeTab === 'stats') {
       fetchCampaignStats();
     }
   }, [activeTab]);
 
-  // Timer dla Undo
+  // Undo Timer
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (pendingDelete && undoSecondsLeft > 0) {
@@ -75,7 +75,7 @@ export default function MailerPage() {
         setUndoSecondsLeft(prev => prev - 1);
       }, 1000);
     } else if (pendingDelete && undoSecondsLeft === 0) {
-      // Czas minął - usuwamy z bazy
+      // Time elapsed - delete from database
       supabase.from('campaigns').delete().in('id', pendingDelete.ids).then(() => {
         setPendingDelete(null);
         setSelectedCampaignIds([]);
@@ -102,16 +102,16 @@ export default function MailerPage() {
   function executeDeletion() {
     if (!deleteConfirmIds) return;
     const ids = deleteConfirmIds;
-    setDeleteConfirmIds(null); // Zamknij modal
+    setDeleteConfirmIds(null); // Close modal
 
-    // 1. Zrób kopię zapasową
+    // 1. Create backup
     const campaignsToBackup = campaigns.filter(c => ids.includes(c.id));
     
-    // 2. Aktywuj stan oczekiwania na usunięcie (10 sekund)
+    // 2. Activate pending delete state (10 seconds)
     setPendingDelete({ ids, backup: campaignsToBackup });
     setUndoSecondsLeft(10);
 
-    // 3. Usuń wizualnie
+    // 3. Delete visually
     setCampaigns(campaigns.filter(c => !ids.includes(c.id)));
     if (selectedCampaign && ids.includes(selectedCampaign.id)) {
       setSelectedCampaign(null);
@@ -121,13 +121,13 @@ export default function MailerPage() {
   function handleUndo() {
     if (!pendingDelete) return;
     
-    // Przywracamy kampanie
+    // Restore campaigns
     setCampaigns(prev => {
       const restored = [...prev, ...pendingDelete.backup];
       return restored.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     });
     
-    // Resetujemy stan usuwania
+    // Reset deletion state
     setPendingDelete(null);
     setSelectedCampaignIds([]);
   }
@@ -157,7 +157,7 @@ export default function MailerPage() {
         setDriveFiles(data.files);
       }
     } catch (err) {
-      console.error('Błąd pobierania z Google Drive', err);
+      console.error('Error fetching from Google Drive', err);
     }
     setLoadingDrive(false);
   }
@@ -182,7 +182,7 @@ export default function MailerPage() {
   }
 
   function toggleAttachment(name: string, link: string) {
-    if (!link) return alert('Ten plik nie ma poprawnego linku do udostępnienia.');
+    if (!link) return alert('This file does not have a valid shareable link.');
     const exists = selectedAttachments.find(a => a.link === link);
     if (exists) {
       setSelectedAttachments(selectedAttachments.filter(a => a.link !== link));
@@ -225,7 +225,7 @@ export default function MailerPage() {
       });
 
       if (res.ok) {
-        setStatus(`Sukces! Sent maile do ${emailList.length} recipients.`);
+        setStatus(`Success! Sent emails to ${emailList.length} recipients.`);
         setEmails('');
         setSubject('');
         setCampaignName('');
@@ -253,7 +253,7 @@ export default function MailerPage() {
 
   return (
     <div className="max-w-7xl mx-auto pb-12 relative">
-      {/* Animowany Toast Apple-style (Powiadomienie) o możliwości cofnięcia */}
+      {/* Animated Apple-style toast notification with undo capability */}
       {pendingDelete && (
         <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-black text-white px-5 py-3 rounded-full shadow-2xl flex items-center space-x-4 z-50 animate-in fade-in slide-in-from-bottom-5">
           <span className="text-sm font-medium">Deleted ({undoSecondsLeft}s)</span>
@@ -278,24 +278,24 @@ export default function MailerPage() {
 
       <div className="flex border-b border-[#d2d2d7] mb-8">
         <button 
-          onClick={() => setActiveTab('wysylka')}
-          className={`flex items-center pb-3 px-4 font-medium border-b-2 transition-colors ${activeTab === 'wysylka' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'}`}
+          onClick={() => setActiveTab('send')}
+          className={`flex items-center pb-3 px-4 font-medium border-b-2 transition-colors ${activeTab === 'send' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'}`}
         >
           <Mail size={18} className="mr-2" /> Send Pack
         </button>
         <button 
-          onClick={() => setActiveTab('statystyki')}
-          className={`flex items-center pb-3 px-4 font-medium border-b-2 transition-colors ${activeTab === 'statystyki' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'}`}
+          onClick={() => setActiveTab('stats')}
+          className={`flex items-center pb-3 px-4 font-medium border-b-2 transition-colors ${activeTab === 'stats' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'}`}
         >
           <BarChart3 size={18} className="mr-2" /> Campaign Stats
         </button>
       </div>
 
-      {activeTab === 'wysylka' && (
+      {activeTab === 'send' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-7 bg-white border border-[#d2d2d7] rounded-xl p-6 shadow-sm">
             {!session?.provider_token ? (
-              <div className="text-center py-12 text-red-600">Brak uprawnień. Przejdź do zakładki Konto, wyloguj się i zaloguj ponownie.</div>
+              <div className="text-center py-12 text-red-600">Insufficient permissions. Please go to Account, log out, and log back in.</div>
             ) : (
               <form onSubmit={handleSend} className="space-y-6">
                 <div>
@@ -319,7 +319,7 @@ export default function MailerPage() {
                       value={campaignName}
                       onChange={(e) => setCampaignName(e.target.value)}
                       className="w-full border border-[#d2d2d7] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black"
-                      placeholder="np. Paczka Wiosenna 2026" 
+                      placeholder="e.g. Spring Beat Pack 2026" 
                       required
                     />
                   </div>
@@ -330,7 +330,7 @@ export default function MailerPage() {
                       value={subject}
                       onChange={(e) => setSubject(e.target.value)}
                       className="w-full border border-[#d2d2d7] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black"
-                      placeholder="np. 🔥 Ekskluzywna paczka bitów" 
+                      placeholder="e.g. 🔥 Exclusive Beat Pack" 
                       required
                     />
                   </div>
@@ -342,7 +342,7 @@ export default function MailerPage() {
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     className="w-full border border-[#d2d2d7] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black min-h-[160px]"
-                    placeholder="Cześć! Podsyłam nowe bity..." 
+                    placeholder="Hey! Here are my latest beats..." 
                     required
                   />
                 </div>
@@ -361,7 +361,7 @@ export default function MailerPage() {
                 )}
 
                 {status && (
-                  <div className={`p-4 rounded-lg text-sm font-medium border ${status.includes('Błąd') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                  <div className={`p-4 rounded-lg text-sm font-medium border ${status.includes('Error') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
                     {status}
                   </div>
                 )}
@@ -451,7 +451,7 @@ export default function MailerPage() {
         </div>
       )}
 
-      {activeTab === 'statystyki' && (
+      {activeTab === 'stats' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative">
           
           {/* Lewa kolumna: Lista Kampanii */}
@@ -600,7 +600,7 @@ export default function MailerPage() {
         </div>
       )}
 
-      {/* MODAL POTWIERDZENIA USUWANIA */}
+      {/* Delete confirmation modal */}
       {deleteConfirmIds && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">

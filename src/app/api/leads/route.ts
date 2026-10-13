@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 
-// Funkcja wyciągająca Instagram z opisu
+// Function extracting Instagram handle or link from video description
 function extractInstagram(description: string): string | null {
   if (!description) return null;
   
-  // Szukamy linków instagram.com/nazwa
+  // Search for instagram.com/username links
   const linkMatch = description.match(/instagram\.com\/([a-zA-Z0-9_.-]+)/i);
   if (linkMatch) return linkMatch[1];
 
-  // Szukamy wzorców typu "IG: nazwa", "Insta: @nazwa", "ig - @nazwa"
+  // Search for patterns like "IG: name", "Insta: @name", "ig - @name"
   const textMatch = description.match(/(?:ig|insta|instagram)[\s]*[:-]*[\s]*@?([a-zA-Z0-9_.-]+)/i);
   if (textMatch && textMatch[1].length > 2) return textMatch[1];
 
@@ -21,21 +21,21 @@ export async function POST(request: Request) {
     const apiKey = process.env.YOUTUBE_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json({ error: 'Brak klucza YOUTUBE_API_KEY w konfiguracji serwera.' }, { status: 500 });
+      return NextResponse.json({ error: 'Missing YOUTUBE_API_KEY in server configuration.' }, { status: 500 });
     }
 
     if (!query) {
-      return NextResponse.json({ error: 'Brak zapytania (tagu).' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing query tag.' }, { status: 400 });
     }
 
-    // 1. Wyszukaj filmy po podanym tagu
+    // 1. Search videos by given tag
     const searchRes = await fetch(
       `https://www.googleapis.com/youtube/v3/search?part=id,snippet&q=${encodeURIComponent(query)}&type=video&maxResults=${maxResults}&order=date&key=${apiKey}`
     );
     
     if (!searchRes.ok) {
       const err = await searchRes.json();
-      throw new Error(err.error?.message || 'Błąd wyszukiwania YouTube');
+      throw new Error(err.error?.message || 'YouTube search error');
     }
     
     const searchData = await searchRes.json();
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ leads: [] });
     }
 
-    // 2. Pobierz pełne opisy tych filmów
+    // 2. Fetch complete descriptions for these videos
     const videosRes = await fetch(
       `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoIds}&key=${apiKey}`
     );
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
 
     const leads: any[] = [];
 
-    // 3. Przeanalizuj opisy w poszukiwaniu Instagrama
+    // 3. Analyze descriptions for Instagram links
     videosData.items.forEach((video: any) => {
       const channelName = video.snippet.channelTitle;
       const description = video.snippet.description;
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       
       const instagram = extractInstagram(description);
 
-      // Dodajemy tylko jeśli znaleźliśmy Instagrama i nie ma jeszcze tego kanału na liście
+      // Add only if Instagram was found and channel is not already present in list
       if (instagram && !leads.some(l => l.channelName === channelName)) {
         leads.push({
           channelName,

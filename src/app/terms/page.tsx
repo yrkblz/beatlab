@@ -42,7 +42,7 @@ export default function TermsOfServicePage() {
         <ul className="list-disc list-inside space-y-2 text-sm sm:text-base text-gray-600 ml-2">
           <li>You are responsible for safeguarding your login credentials and for all activities that occur under your account.</li>
           <li>You may authenticate via Google OAuth or other supported single-sign-on methods. You agree not to share your account credentials with unauthorized third parties.</li>
-          <li>You must notify us immediately at <span className="font-medium text-gray-900">security@beathelper.com</span> if you suspect any unauthorized access or breach of security.</li>
+          <li>You must notify us immediately at <span className="font-medium text-gray-900">beatlab.space@gmail.com</span> if you suspect any unauthorized access or breach of security.</li>
         </ul>
       </section>
 
@@ -187,8 +187,8 @@ export default function TermsOfServicePage() {
         </p>
         <div className="p-4 rounded-xl border border-gray-200 bg-gray-50/80 text-sm text-gray-700">
           <p className="font-semibold text-gray-900">BeatHelper Inc. — Legal Department</p>
-          <p>Email: <a href="mailto:legal@beathelper.com" className="text-black underline font-medium">legal@beathelper.com</a></p>
-          <p>Support: <a href="mailto:support@beathelper.com" className="text-black underline font-medium">support@beathelper.com</a></p>
+          <p>Email: <a href="mailto:beatlab.space@gmail.com" className="text-black underline font-medium">beatlab.space@gmail.com</a></p>
+          <p>Support: <a href="mailto:beatlab.space@gmail.com" className="text-black underline font-medium">beatlab.space@gmail.com</a></p>
         </div>
       </section>
     </LegalLayout>

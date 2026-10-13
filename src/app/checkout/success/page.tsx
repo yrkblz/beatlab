@@ -51,27 +51,27 @@ function SuccessContent() {
         </div>
 
         <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 mb-2">
-          Witaj w klubie BEATLAB!
+          Welcome to the BEATLAB Club!
         </h1>
         <p className="text-sm text-gray-500 mb-8 leading-relaxed">
-          Płatność jednorazowa $29 została pomyślnie przetworzona. Odblokowałeś nielimitowany, dożywotni dostęp do wszystkich narzędzi studyjnych.
+          Your one-time $29 payment has been processed successfully. You have unlocked unlimited lifetime access to all studio tools.
         </p>
 
         {isMock && (
           <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700 text-left">
-            💡 <strong>Tryb testowy:</strong> Dożywotni dostęp został pomyślnie aktywowany na Twoim koncie w bazie danych Supabase.
+            💡 <strong>Test Mode:</strong> Lifetime access has been successfully activated on your Supabase account.
           </div>
         )}
 
         <div className="bg-gray-50/70 border border-gray-100 rounded-2xl p-4 text-left text-xs text-gray-600 mb-8 space-y-2">
           <div className="flex items-center gap-2 text-gray-900 font-semibold">
             <Sparkles size={14} className="text-amber-500" />
-            <span>Co masz teraz odblokowane:</span>
+            <span>What is unlocked for you:</span>
           </div>
-          <p className="flex items-center gap-1.5">✓ Zero comiesięcznych subskrypcji</p>
-          <p className="flex items-center gap-1.5">✓ Nieograniczone generowanie umów licencyjnych</p>
-          <p className="flex items-center gap-1.5">✓ Pełny Placement CRM &amp; Lead Finder</p>
-          <p className="flex items-center gap-1.5">✓ Social Auto-Publisher i analityka finansowa</p>
+          <p className="flex items-center gap-1.5">✓ Zero recurring subscriptions</p>
+          <p className="flex items-center gap-1.5">✓ Unlimited license agreement generation</p>
+          <p className="flex items-center gap-1.5">✓ Full Placement CRM &amp; Lead Finder</p>
+          <p className="flex items-center gap-1.5">✓ Social Auto-Publisher and financial analytics</p>
         </div>
 
         <Link
@@ -81,11 +81,11 @@ function SuccessContent() {
           {updating ? (
             <>
               <Loader2 size={16} className="animate-spin" />
-              <span>Konfigurowanie konta...</span>
+              <span>Setting up your account...</span>
             </>
           ) : (
             <>
-              <span>Przejdź do Studio</span>
+              <span>Go to Studio Dashboard</span>
               <ArrowRight size={16} />
             </>
           )}

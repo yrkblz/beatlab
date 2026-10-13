@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Download, Video, Loader2, Link2, AlertCircle } from 'lucide-react';
+import { Download, Video, Loader2, Link2, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function DownloaderPage() {
   const [url, setUrl] = useState('');
@@ -107,6 +107,3 @@ export default function DownloaderPage() {
     </div>
   );
 }
-
-// Need to import CheckCircle here since I used it above
-import { CheckCircle } from 'lucide-react';

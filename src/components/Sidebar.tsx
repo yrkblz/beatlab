@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { LayoutDashboard, Music2, CircleDollarSign, Mail, Search, Sparkles, CheckCircle, Video, FileText, Kanban, Share2 } from 'lucide-react';
+import { LayoutDashboard, Music2, CircleDollarSign, Mail, Search, Sparkles, CheckCircle, Video, FileText, Kanban, Share2, CreditCard } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -219,6 +219,11 @@ export default function Sidebar() {
         <NavItem href="/downloader" icon={<Video size={20} />} label="YT Downloader" />
         <NavItem href="/publisher" icon={<Share2 size={20} />} label="Social Publisher" />
 
+        <div className="pt-4 pb-2">
+          <p className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Account</p>
+        </div>
+        <NavItem href="/account?tab=billing" icon={<CreditCard size={20} />} label="Plan & Billing" />
+
       </nav>
 
       <div className="p-4 border-t border-[#d2d2d7]">
@@ -243,19 +248,19 @@ export default function Sidebar() {
                   <Link
                     href="/upgrade"
                     className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/70 hover:bg-blue-100 transition-colors"
-                    title="Przejdź do zakupu Lifetime Deal"
+                    title="Upgrade to Lifetime Access"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                    <span>Demo ({subStatus.daysRemaining} {subStatus.daysRemaining === 1 ? 'dzień' : 'dni'})</span>
+                    <span>Trial ({subStatus.daysRemaining} {subStatus.daysRemaining === 1 ? 'day' : 'days'})</span>
                   </Link>
                 ) : (
                   <Link
                     href="/upgrade"
                     className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200/70 hover:bg-rose-100 transition-colors"
-                    title="Demo wygasło - odblokuj dostęp"
+                    title="Trial expired - unlock lifetime access"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                    <span>Wygasło • Upgrade</span>
+                    <span>Expired • Upgrade</span>
                   </Link>
                 )}
               </div>

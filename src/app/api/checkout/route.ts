@@ -27,7 +27,7 @@ export async function POST(req: Request) {
             currency: 'usd',
             product_data: {
               name: 'BEATLAB Studio Suite – Lifetime Access',
-              description: 'Dożywotni dostęp do platformy: Placement CRM, License Generator, Beat Catalog, Mailer, Lead Finder, Social Auto-Publisher i analityka.',
+              description: 'Lifetime access to all BEATLAB modules: Placement CRM, License Generator, Beat Catalog, Mailer, Lead Finder, Social Publisher, and Financial Analytics.',
               tax_code: 'txcd_10202000',
             },
             unit_amount: LIFETIME_PRICE_CENTS,

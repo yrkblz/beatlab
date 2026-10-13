@@ -145,7 +145,7 @@ export default function PrivacyPolicyPage() {
         <ul className="list-disc list-inside space-y-2 text-sm sm:text-base text-gray-600 ml-2">
           <li><strong>Right to Access &amp; Portability:</strong> Request an export of your personal and catalog records.</li>
           <li><strong>Right to Rectification:</strong> Edit or correct your account details directly via your Account Settings.</li>
-          <li><strong>Right to Erasure (&ldquo;Right to Be Forgotten&rdquo;):</strong> Request full deletion of your account and records by emailing <span className="font-semibold text-gray-900">privacy@beathelper.com</span>.</li>
+          <li><strong>Right to Erasure (&ldquo;Right to Be Forgotten&rdquo;):</strong> Request full deletion of your account and records by emailing <span className="font-semibold text-gray-900">beatlab.space@gmail.com</span>.</li>
           <li><strong>Right to Restrict or Object to Processing:</strong> Object to specific processing activities under applicable European law.</li>
           <li><strong>Non-Discrimination:</strong> We will never discriminate against you for exercising any of your statutory privacy rights.</li>
         </ul>
@@ -190,8 +190,8 @@ export default function PrivacyPolicyPage() {
         </p>
         <div className="p-4 rounded-xl border border-gray-200 bg-gray-50/80 text-sm text-gray-700">
           <p className="font-semibold text-gray-900">BeatHelper Inc. — Privacy Operations</p>
-          <p>Email: <a href="mailto:privacy@beathelper.com" className="text-black underline font-medium">privacy@beathelper.com</a></p>
-          <p>Legal: <a href="mailto:legal@beathelper.com" className="text-black underline font-medium">legal@beathelper.com</a></p>
+          <p>Email: <a href="mailto:beatlab.space@gmail.com" className="text-black underline font-medium">beatlab.space@gmail.com</a></p>
+          <p>Legal: <a href="mailto:beatlab.space@gmail.com" className="text-black underline font-medium">beatlab.space@gmail.com</a></p>
         </div>
       </section>
     </LegalLayout>

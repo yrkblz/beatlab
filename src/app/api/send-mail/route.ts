@@ -21,13 +21,13 @@ export async function POST(request: Request) {
     const origin = `${protocol}://${host}`;
 
     if (!accessToken) {
-      return NextResponse.json({ error: 'Brak tokenu dostępu Google.' }, { status: 401 });
+      return NextResponse.json({ error: 'Missing Google access token.' }, { status: 401 });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-    // 1. Zapisz Kampanię w Supabase (używamy pola subject w bazie jako nazwy kampanii)
+    // 1. Save Campaign in Supabase (using subject as campaign identifier)
     const campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
       method: 'POST',
       headers: {
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const campaignData = await campaignRes.json();
     const campaignId = campaignData[0].id;
 
-    // Przygotuj estetyczny blok HTML z załącznikami (Kopia natywnych klocków Google Drive)
+    // Prepare HTML block for attachments (similar to Google Drive attachment cards)
     let attachmentsHtml = '';
     if (attachments && attachments.length > 0) {
       attachmentsHtml = `
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       `;
     }
 
-    // 2. Wyślij maile i zapisz logi śledzenia dla każdego z nich
+    // 2. Dispatch emails and record tracking logs for each
     for (const email of emails) {
       const logRes = await fetch(`${supabaseUrl}/rest/v1/email_logs`, {
         method: 'POST',
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       const logData = await logRes.json();
       const logId = logData[0].id;
 
-      // Piksel śledzący (ukryty obrazek 1x1 na samym końcu maila)
+      // Tracking pixel (hidden 1x1 image at the end of the email)
       const trackingPixelUrl = `${origin}/api/track?log_id=${logId}`;
       
       const htmlMessage = `

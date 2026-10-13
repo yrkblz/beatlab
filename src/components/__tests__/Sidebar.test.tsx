@@ -89,6 +89,7 @@ describe('Sidebar component', () => {
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Dashboard/i })).toHaveAttribute('href', '/');
     expect(screen.getByText('Finance')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Plan & Billing/i })).toHaveAttribute('href', '/account?tab=billing');
   });
 
   it('shows logged out state on inner studio routes when no user is present', async () => {

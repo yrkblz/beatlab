@@ -41,7 +41,7 @@ describe('TrialBadge Component', () => {
     expect(screen.getByText('Lifetime Member')).toBeInTheDocument();
   });
 
-  it('renders Demo Free badge with days remaining and upgrade button during active trial', () => {
+  it('renders Free Trial badge with days remaining and upgrade button during active trial', () => {
     render(
       <TrialBadge
         status={{
@@ -57,15 +57,15 @@ describe('TrialBadge Component', () => {
       />
     );
 
-    expect(screen.getByText('Demo Free')).toBeInTheDocument();
-    expect(screen.getByText(/2 dni/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Kup dożywotnio \$29/i })).toHaveAttribute(
+    expect(screen.getByText('Free Trial')).toBeInTheDocument();
+    expect(screen.getByText(/2 days/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Get Lifetime Access \$29/i })).toHaveAttribute(
       'href',
       '/upgrade'
     );
   });
 
-  it('renders Demo wygasło warning when trial is expired', () => {
+  it('renders Trial Expired warning when trial is expired', () => {
     render(
       <TrialBadge
         status={{
@@ -81,8 +81,8 @@ describe('TrialBadge Component', () => {
       />
     );
 
-    expect(screen.getByText('Demo wygasło')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Odblokuj za \$29/i })).toHaveAttribute(
+    expect(screen.getByText('Trial Expired')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Unlock for \$29/i })).toHaveAttribute(
       'href',
       '/upgrade'
     );

@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     });
   }
 
-  // Zwracamy przezroczysty obrazek GIF (1x1 piksel), który oszuka klienta poczty
+  // Return transparent 1x1 GIF pixel for tracking email open events
   const transparentGif = Buffer.from(
     'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
     'base64'

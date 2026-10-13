@@ -71,26 +71,26 @@ export default function UpgradePage() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        alert(data.error || 'Nie udało się zainicjować płatności Stripe.');
+        alert(data.error || 'Failed to initiate Stripe checkout.');
         setLoading(false);
       }
     } catch (err: any) {
       console.error('Checkout error:', err);
-      alert('Wystąpił błąd połączenia z bramką płatności.');
+      alert('An error occurred connecting to the payment gateway.');
       setLoading(false);
     }
   }
 
   const features = [
-    'Nieograniczony dostęp do wszystkich 9 modułów BEATLAB',
-    'Placement CRM – zarządzanie relacjami z artystami i A&R',
-    'Generator umów licencyjnych (MP3, WAV, Trackout, Exclusive)',
-    'Katalog bitów z playerem i natychmiastowym eksportem',
-    'Social Auto-Publisher dla TikToka i Instagrama',
-    'Lead Finder & Mail Tracker z pikselem śledzącym',
-    'Wielowalutowy kalkulator finansowy i przychodów',
-    'Brak comiesięcznych subskrypcji – płacisz tylko raz',
-    'Wszystkie przyszłe aktualizacje i nowe narzędzia w cenie',
+    'Unlimited access to all 9 BEATLAB studio modules',
+    'Placement CRM – artist relationships and A&R pipeline tracking',
+    'License Agreement Generator (MP3, WAV, Trackout, Exclusive)',
+    'Beat Catalog with audio player and instant contract export',
+    'Social Auto-Publisher for TikTok and Instagram',
+    'Lead Finder & Mail Tracker with tracking pixel',
+    'Multi-currency financial hub & revenue calculator',
+    'Zero recurring subscriptions – pay once, keep forever',
+    'All future platform updates and upcoming tools included',
   ];
 
   return (
@@ -103,14 +103,14 @@ export default function UpgradePage() {
             className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-black transition-colors"
           >
             <ArrowLeft size={16} className="mr-1.5" />
-            Wróć do BEATLAB
+            Back to BEATLAB
           </Link>
 
           {subStatus?.isTrialActive && (
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
               <Clock size={13} />
               <span>
-                3-dniowe Demo: pozostało {subStatus.daysRemaining} {subStatus.daysRemaining === 1 ? 'dzień' : 'dni'}
+                3-Day Free Trial: {subStatus.daysRemaining} {subStatus.daysRemaining === 1 ? 'day' : 'days'} remaining
               </span>
             </div>
           )}
@@ -118,7 +118,7 @@ export default function UpgradePage() {
           {subStatus?.isTrialExpired && (
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold">
               <Clock size={13} />
-              <span>Okres próbny wygasł – wybierz dożywotni dostęp</span>
+              <span>Trial Expired – Unlock Lifetime Access</span>
             </div>
           )}
         </div>
@@ -127,13 +127,13 @@ export default function UpgradePage() {
         <div className="text-center max-w-2xl mx-auto mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black text-white text-xs font-semibold tracking-wide uppercase mb-4 shadow-sm">
             <Sparkles size={13} className="text-amber-400" />
-            <span>Lifetime Deal • Jednorazowa Płatność</span>
+            <span>Lifetime Deal • One-Time Payment</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-gray-900 mb-4 leading-tight">
-            Płacisz raz. Korzystasz bez limitu przez całe życie.
+            Pay once. Create without limits for life.
           </h1>
           <p className="text-base sm:text-lg text-gray-600 leading-relaxed">
-            Żadnych powtarzających się subskrypcji. Pełny ekosystem profesjonalnych narzędzi dla producentów muzycznych w cenie jednej kolacji.
+            Zero recurring subscriptions. The complete ecosystem of professional music producer tools for the price of dinner.
           </p>
         </div>
 
@@ -141,7 +141,7 @@ export default function UpgradePage() {
         <div className="max-w-lg mx-auto bg-white border-2 border-black rounded-3xl p-8 sm:p-10 shadow-2xl relative overflow-hidden">
           {/* Top highlight ribbon */}
           <div className="absolute top-0 right-0 bg-black text-white text-[11px] font-bold px-4 py-1 rounded-bl-xl tracking-wider uppercase">
-            Pełny Dostęp
+            Full Access
           </div>
 
           <div className="flex items-center gap-3 mb-6">
@@ -150,18 +150,18 @@ export default function UpgradePage() {
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-900">BEATLAB Lifetime Access</h2>
-              <p className="text-xs text-gray-500">Wszystkie moduły i przyszłe funkcje</p>
+              <p className="text-xs text-gray-500">All current modules and future updates included</p>
             </div>
           </div>
 
           {/* Price display */}
           <div className="flex items-baseline gap-2 mb-2">
             <span className="text-5xl sm:text-6xl font-black tracking-tight text-gray-900">$29</span>
-            <span className="text-sm font-semibold text-gray-500 uppercase tracking-wide">USD / jednorazowo</span>
+            <span className="text-sm font-semibold text-gray-500 uppercase tracking-wide">USD / one-time</span>
           </div>
           <p className="text-xs text-emerald-600 font-medium mb-8 flex items-center gap-1.5">
             <Zap size={14} />
-            Płatność jednorazowa • Dożywotni dostęp • 0 zł miesięcznie
+            One-time payment • Lifetime access • $0 monthly fees
           </p>
 
           {/* Checkout CTA Button */}
@@ -173,16 +173,16 @@ export default function UpgradePage() {
             {loading ? (
               <>
                 <Loader2 size={20} className="animate-spin" />
-                <span>Łączenie z bezpieczną kasą Stripe...</span>
+                <span>Connecting to secure Stripe checkout...</span>
               </>
             ) : subStatus?.isLifetime ? (
               <>
                 <Check size={20} className="text-emerald-400" />
-                <span>Posiadasz już dożywotni dostęp!</span>
+                <span>You already have Lifetime Access!</span>
               </>
             ) : (
               <>
-                <span>Kup Dożywotni Dostęp ($29)</span>
+                <span>Get Lifetime Access ($29)</span>
               </>
             )}
           </button>
@@ -190,7 +190,7 @@ export default function UpgradePage() {
           {/* Payment Badges */}
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2 pb-6 border-b border-gray-100 text-xs text-gray-500">
             <span className="flex items-center gap-1">
-              <CreditCard size={13} /> Karta (Visa, MC)
+              <CreditCard size={13} /> Card (Visa, MC, Amex)
             </span>
             <span>•</span>
             <span>Apple Pay</span>
@@ -202,7 +202,7 @@ export default function UpgradePage() {
 
           {/* Features Checklist */}
           <div className="mt-6 space-y-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Co otrzymujesz w pakiecie:</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Everything included in your pass:</p>
             {features.map((feat, idx) => (
               <div key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm text-gray-700">
                 <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
@@ -216,7 +216,7 @@ export default function UpgradePage() {
           {/* Security guarantee */}
           <div className="mt-8 pt-6 border-t border-gray-100 flex items-center justify-center gap-2 text-xs text-gray-400">
             <ShieldCheck size={16} className="text-emerald-500" />
-            <span>Bezpieczne szyfrowane płatności obsługiwane przez Stripe</span>
+            <span>Guaranteed safe &amp; encrypted checkout powered by Stripe</span>
           </div>
         </div>
       </div>

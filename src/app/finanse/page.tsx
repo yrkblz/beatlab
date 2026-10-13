@@ -125,15 +125,15 @@ export default function FinansePage() {
     e.preventDefault();
     
     if (!beatName) {
-      alert("Błąd: Proszę wpisać nazwę bitu.");
+      alert("Error: Please enter the beat title.");
       return;
     }
     if (!amount) {
-      alert("Błąd: Proszę podać kwotę.");
+      alert("Error: Please enter an amount.");
       return;
     }
     if (!user) {
-      alert("Błąd: Brak zalogowanego użytkownika.");
+      alert("Error: No logged-in user found.");
       return;
     }
 
@@ -151,7 +151,7 @@ export default function FinansePage() {
       ]);
 
       if (error) {
-        alert(`Błąd bazy danych: ${error.message}`);
+        alert(`Database error: ${error.message}`);
         return;
       }
 
@@ -161,7 +161,7 @@ export default function FinansePage() {
       fetchData(user.id);
       
     } catch (err: any) {
-      alert(`Wystąpił nieoczekiwany błąd: ${err.message}`);
+      alert(`An unexpected error occurred: ${err.message}`);
     }
   }
 
