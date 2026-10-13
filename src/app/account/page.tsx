@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Sparkles, Loader2, LogOut, Check, ChevronDown } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
+import { calculateSubscriptionStatus, type SubscriptionStatus } from '@/lib/subscription';
 
 const CURRENCIES = ['USD', 'PLN', 'EUR', 'RUB', 'UAH'];
 
@@ -61,6 +62,7 @@ export default function AccountPage() {
   const [stageName, setStageName] = useState('');
   const [address, setAddress] = useState('');
   const [baseCurrency, setBaseCurrency] = useState('USD');
+  const [subStatus, setSubStatus] = useState<SubscriptionStatus | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -101,6 +103,12 @@ export default function AccountPage() {
         setStageName(data.stage_name || '');
         setAddress(data.address || '');
         setBaseCurrency(data.base_currency || 'USD');
+        setSubStatus(
+          calculateSubscriptionStatus({
+            is_lifetime_paid: data.is_lifetime_paid,
+            trial_ends_at: data.trial_ends_at,
+          })
+        );
       }
     } catch (err) {
       console.error('Error fetching profile:', err);
@@ -192,14 +200,46 @@ export default function AccountPage() {
         </div>
 
         <form onSubmit={handleSave} className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm space-y-6">
-          <div className="pb-6 border-b border-gray-100 mb-6 flex items-center space-x-4">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-gray-900 to-gray-700 flex items-center justify-center text-white font-semibold text-lg shadow-inner">
-              {user.email?.charAt(0).toUpperCase() ?? '?'}
+          <div className="pb-6 border-b border-gray-100 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-gray-900 to-gray-700 flex items-center justify-center text-white font-semibold text-lg shadow-inner shrink-0">
+                {user.email?.charAt(0).toUpperCase() ?? '?'}
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">{user.email}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-gray-400">Google Account</span>
+                  {subStatus && (
+                    subStatus.isLifetime ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Lifetime Member
+                      </span>
+                    ) : subStatus.isTrialActive ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                        Demo ({subStatus.daysRemaining} {subStatus.daysRemaining === 1 ? 'dzień' : 'dni'})
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                        Demo wygasło
+                      </span>
+                    )
+                  )}
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-gray-900">{user.email}</p>
-              <p className="text-sm text-gray-500">Logged in via Google</p>
-            </div>
+
+            {subStatus && !subStatus.isLifetime && (
+              <Link
+                href="/upgrade"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-xs transition-colors shrink-0"
+              >
+                <Sparkles size={13} className="text-amber-400" />
+                <span>Kup Lifetime ($29)</span>
+              </Link>
+            )}
           </div>
 
           <div>

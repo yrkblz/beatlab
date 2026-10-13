@@ -8,7 +8,6 @@ import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { useRouter, usePathname } from 'next/navigation';
 import { calculateSubscriptionStatus, type SubscriptionStatus } from '@/lib/subscription';
-import TrialBadge from './TrialBadge';
 
 export default function Sidebar() {
   const [user, setUser] = useState<User | null>(null);
@@ -220,29 +219,49 @@ export default function Sidebar() {
         <NavItem href="/downloader" icon={<Video size={20} />} label="YT Downloader" />
         <NavItem href="/publisher" icon={<Share2 size={20} />} label="Social Publisher" />
 
-        <div className="pt-4 pb-2">
-          <p className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Plan</p>
-        </div>
-        <NavItem
-          href="/upgrade"
-          icon={<Sparkles size={20} className="text-amber-500" />}
-          label="Lifetime Deal ($29)"
-        />
       </nav>
 
-      <TrialBadge status={subStatus} isLoggedIn={Boolean(user)} />
-
       <div className="p-4 border-t border-[#d2d2d7]">
-        <Link href="/account">
-          <div className="flex items-center space-x-3 px-2 py-2 bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-all">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-900 to-gray-700 flex items-center justify-center text-white font-semibold text-sm">
+        <div className="flex items-center space-x-3 px-3 py-2.5 bg-white rounded-2xl shadow-xs border border-gray-200/80 hover:border-gray-300 transition-all">
+          <Link href="/account" className="shrink-0 group">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-gray-900 to-gray-700 flex items-center justify-center text-white font-semibold text-sm transition-transform group-hover:scale-105">
               {avatarInitial}
             </div>
-            <span className="text-sm font-medium text-gray-800 truncate">
+          </Link>
+          <div className="flex-1 min-w-0">
+            <Link href="/account" className="block text-xs font-semibold text-gray-900 truncate hover:text-black">
               {userDisplayLabel}
-            </span>
+            </Link>
+            {user && subStatus && (
+              <div className="mt-1 flex items-center">
+                {subStatus.isLifetime ? (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    Lifetime Access
+                  </span>
+                ) : subStatus.isTrialActive ? (
+                  <Link
+                    href="/upgrade"
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/70 hover:bg-blue-100 transition-colors"
+                    title="Przejdź do zakupu Lifetime Deal"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                    <span>Demo ({subStatus.daysRemaining} {subStatus.daysRemaining === 1 ? 'dzień' : 'dni'})</span>
+                  </Link>
+                ) : (
+                  <Link
+                    href="/upgrade"
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200/70 hover:bg-rose-100 transition-colors"
+                    title="Demo wygasło - odblokuj dostęp"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                    <span>Wygasło • Upgrade</span>
+                  </Link>
+                )}
+              </div>
+            )}
           </div>
-        </Link>
+        </div>
         <div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-gray-400">
           <Link href="/terms" className="hover:text-black transition-colors">
             Terms
