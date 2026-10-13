@@ -79,8 +79,8 @@ export default function AccountPage() {
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  // Active Tab State (defaults to 'billing' for overview, switchable to 'profile')
-  const [activeTab, setActiveTab] = useState<'billing' | 'profile'>('billing');
+  // Active Tab State (defaults to 'profile', switchable to 'billing')
+  const [activeTab, setActiveTab] = useState<'profile' | 'billing'>('profile');
 
   // Trial Timer & Expired Modal State
   const [showExpiredModal, setShowExpiredModal] = useState(false);
@@ -297,6 +297,24 @@ export default function AccountPage() {
           <button
             type="button"
             role="tab"
+            id="tab-profile"
+            data-testid="tab-profile"
+            aria-selected={activeTab === 'profile'}
+            aria-controls="panel-profile"
+            onClick={() => setActiveTab('profile')}
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'profile'
+                ? 'border-black text-black'
+                : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
+            }`}
+          >
+            <UserIcon size={16} />
+            <span>Profile & Studio</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
             id="tab-billing"
             data-testid="tab-billing"
             aria-selected={activeTab === 'billing'}
@@ -323,24 +341,6 @@ export default function AccountPage() {
                 Expired
               </span>
             ) : null}
-          </button>
-
-          <button
-            type="button"
-            role="tab"
-            id="tab-profile"
-            data-testid="tab-profile"
-            aria-selected={activeTab === 'profile'}
-            aria-controls="panel-profile"
-            onClick={() => setActiveTab('profile')}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'profile'
-                ? 'border-black text-black'
-                : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
-            }`}
-          >
-            <UserIcon size={16} />
-            <span>Profile & Studio</span>
           </button>
         </div>
 
@@ -562,16 +562,6 @@ export default function AccountPage() {
                   </div>
                 </div>
               </div>
-
-              {subStatus && !subStatus.isLifetime && (
-                <Link
-                  href="/upgrade"
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-xs transition-colors shrink-0"
-                >
-                  <Sparkles size={13} className="text-amber-400" />
-                  <span>Get Lifetime ($29)</span>
-                </Link>
-              )}
             </div>
 
             <div>

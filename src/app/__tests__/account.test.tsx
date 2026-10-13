@@ -73,9 +73,15 @@ describe('Account & Settings Page (/account)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Plan & Billing/i })).toBeInTheDocument();
+      expect(screen.getByTestId('tab-billing')).toBeInTheDocument();
     });
 
+    // Switch to Plan & Billing tab
+    act(() => {
+      fireEvent.click(screen.getByTestId('tab-billing'));
+    });
+
+    expect(screen.getByRole('heading', { name: /Plan & Billing/i })).toBeInTheDocument();
     expect(screen.getByText('3-Day Free Trial')).toBeInTheDocument();
     expect(screen.getByTestId('trial-countdown-timer')).toBeInTheDocument();
     expect(screen.getByText('Days')).toBeInTheDocument();
@@ -111,6 +117,11 @@ describe('Account & Settings Page (/account)', () => {
 
     await waitFor(() => {
       expect(screen.getAllByText('Lifetime Member').length).toBeGreaterThan(0);
+    });
+
+    // Switch to Plan & Billing tab
+    act(() => {
+      fireEvent.click(screen.getByTestId('tab-billing'));
     });
 
     expect(screen.getByText(/BEATLAB Lifetime Access Pass/i)).toBeInTheDocument();
@@ -153,7 +164,7 @@ describe('Account & Settings Page (/account)', () => {
     expect(screen.getAllByText(/Get Lifetime Access for \$29/i).length).toBeGreaterThan(0);
   });
 
-  it('allows user to switch between Plan & Billing tab and Profile & Studio tab', async () => {
+  it('allows user to switch between Profile & Studio tab and Plan & Billing tab', async () => {
     const mockUser = {
       id: 'usr-tabs',
       email: 'producer@beatlab.space',
@@ -182,28 +193,29 @@ describe('Account & Settings Page (/account)', () => {
       expect(screen.getByTestId('tab-profile')).toBeInTheDocument();
     });
 
-    // Default tab is billing when profile is complete
-    expect(screen.getByTestId('panel-billing')).toBeInTheDocument();
-    expect(screen.queryByTestId('panel-profile')).not.toBeInTheDocument();
-
-    // Click Profile tab
-    act(() => {
-      fireEvent.click(screen.getByTestId('tab-profile'));
-    });
-
+    // Default tab is profile
     expect(screen.getByTestId('panel-profile')).toBeInTheDocument();
     expect(screen.queryByTestId('panel-billing')).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('Metro Boomin')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Metro')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Save Settings/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Get Lifetime \(\$29\)/i })).not.toBeInTheDocument();
 
-    // Click back to Billing tab
+    // Click Billing tab
     act(() => {
       fireEvent.click(screen.getByTestId('tab-billing'));
     });
 
     expect(screen.getByTestId('panel-billing')).toBeInTheDocument();
     expect(screen.queryByTestId('panel-profile')).not.toBeInTheDocument();
+
+    // Click back to Profile tab
+    act(() => {
+      fireEvent.click(screen.getByTestId('tab-profile'));
+    });
+
+    expect(screen.getByTestId('panel-profile')).toBeInTheDocument();
+    expect(screen.queryByTestId('panel-billing')).not.toBeInTheDocument();
   });
 
   it('automatically opens Profile & Studio tab when required profile fields are incomplete', async () => {
