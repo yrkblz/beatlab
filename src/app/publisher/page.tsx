@@ -1,10 +1,24 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, DragEvent } from 'react';
-import { CloudUpload, Share2, Type, FileVideo, CircleCheck, X } from 'lucide-react';
+import {
+  CloudUpload,
+  Share2,
+  Type,
+  FileVideo,
+  CircleCheck,
+  X,
+  Sparkles,
+  Clock,
+  KeyRound,
+  AlertCircle,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function PublisherPage() {
+  // Feature flag: set to false once TikTok & Instagram production API credentials are ready
+  const isAwaitingApiKeys = true;
+
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [description, setDescription] = useState('');
   const [isHovering, setIsHovering] = useState(false);
@@ -142,12 +156,68 @@ export default function PublisherPage() {
 
   return (
     <div className="max-w-4xl mx-auto pb-12 animate-in fade-in slide-in-from-bottom-4">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold tracking-tight text-gray-900 flex items-center">
-          <Share2 size={32} className="text-blue-600 mr-3" />
-          Social Auto-Publisher
-        </h2>
-        <p className="text-gray-500 mt-2">Upload your beat video once and publish it across multiple social platforms automatically.</p>
+      {/* Page Header */}
+      <div className="mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight text-gray-900 flex items-center">
+              <Share2 size={32} className="text-blue-600 mr-3" />
+              Social Auto-Publisher
+              <span className="ml-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                Coming Soon
+              </span>
+            </h2>
+            <p className="text-gray-500 mt-2">
+              Upload your beat video once and publish it across multiple social platforms automatically.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Coming Soon Notice Banner */}
+      <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 via-indigo-50 to-pink-50 border border-blue-200/80 rounded-2xl shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start space-x-4">
+            <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-md shrink-0">
+              <Sparkles size={24} />
+            </div>
+            <div>
+              <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-blue-100/90 text-blue-800 text-xs font-bold uppercase tracking-wider mb-2">
+                <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                Coming Soon • Awaiting API Approval
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">
+                Social Auto-Publisher is Launching Soon
+              </h3>
+              <p className="text-sm text-gray-600 mt-1 max-w-2xl leading-relaxed">
+                This feature is fully developed and will be enabled automatically as soon as our developer API credentials and production permissions are approved by <strong>TikTok</strong> and <strong>Instagram</strong>.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Platform Review Status */}
+        <div className="mt-5 pt-4 border-t border-blue-200/60 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="flex items-center justify-between p-3.5 bg-white/90 rounded-xl border border-blue-100 shadow-2xs">
+            <span className="font-semibold text-gray-800 flex items-center gap-2">
+              <KeyRound size={15} className="text-pink-600" /> Instagram Graph API
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+              Awaiting App Review
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between p-3.5 bg-white/90 rounded-xl border border-blue-100 shadow-2xs">
+            <span className="font-semibold text-gray-800 flex items-center gap-2">
+              <KeyRound size={15} className="text-gray-900" /> TikTok Content Posting API
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+              Awaiting Developer Keys
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -224,7 +294,12 @@ export default function PublisherPage() {
         {/* Right Column: Platform Integration & Actions */}
         <div className="space-y-6">
           <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Connections</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Connections</h3>
+              <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                Preview Mode
+              </span>
+            </div>
             <p className="text-sm text-gray-500 mb-6">Connect your social accounts to publish directly.</p>
             
             <div className="space-y-4">
@@ -294,37 +369,58 @@ export default function PublisherPage() {
               </li>
             </ul>
 
-            <button
-              onClick={handlePublish}
-              disabled={publishingState !== 'idle' || !videoFile || (!igConnected && !ttConnected)}
-              className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex justify-center items-center"
-            >
-              {publishingState === 'uploading' && (
-                <span className="flex items-center space-x-2">
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Uploading...</span>
-                </span>
-              )}
-              {publishingState === 'publishing' && (
-                <span className="flex items-center space-x-2">
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Publishing...</span>
-                </span>
-              )}
-              {publishingState === 'done' && (
-                <span className="flex items-center space-x-2">
-                  <CircleCheck size={20} className="text-white" />
-                  <span>Done</span>
-                </span>
-              )}
-              {publishingState === 'idle' && 'Publish to Selected Platforms'}
-            </button>
+            {/* Coming soon button while awaiting API keys */}
+            {isAwaitingApiKeys ? (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    alert(
+                      'Social Auto-Publisher is launching soon! We are awaiting final API review and developer credentials from TikTok and Instagram.'
+                    )
+                  }
+                  className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-md flex justify-center items-center text-sm cursor-pointer"
+                >
+                  <Clock size={16} className="mr-2" />
+                  Coming Soon (Awaiting API Keys)
+                </button>
+                <p className="text-[11px] text-center text-gray-400">
+                  Upload & configuration are enabled in preview mode.
+                </p>
+              </div>
+            ) : (
+              <button
+                onClick={handlePublish}
+                disabled={publishingState !== 'idle' || !videoFile || (!igConnected && !ttConnected)}
+                className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex justify-center items-center"
+              >
+                {publishingState === 'uploading' && (
+                  <span className="flex items-center space-x-2">
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Uploading...</span>
+                  </span>
+                )}
+                {publishingState === 'publishing' && (
+                  <span className="flex items-center space-x-2">
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Publishing...</span>
+                  </span>
+                )}
+                {publishingState === 'done' && (
+                  <span className="flex items-center space-x-2">
+                    <CircleCheck size={20} className="text-white" />
+                    <span>Done</span>
+                  </span>
+                )}
+                {publishingState === 'idle' && 'Publish to Selected Platforms'}
+              </button>
+            )}
           </div>
         </div>
       </div>
