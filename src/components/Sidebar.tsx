@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { LayoutDashboard, Music2, CircleDollarSign, Mail, Search, Sparkles, CheckCircle, Video, FileText, Kanban, Share2, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Music2, CircleDollarSign, Mail, Search, Sparkles, CheckCircle, Video, FileText, Kanban, Share2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -218,11 +218,6 @@ export default function Sidebar() {
         </div>
         <NavItem href="/downloader" icon={<Video size={20} />} label="YT Downloader" />
         <NavItem href="/publisher" icon={<Share2 size={20} />} label="Social Publisher" />
-
-        <div className="pt-4 pb-2">
-          <p className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Account</p>
-        </div>
-        <NavItem href="/account?tab=billing" icon={<CreditCard size={20} />} label="Plan & Billing" />
 
       </nav>
 

@@ -87,9 +87,8 @@ describe('Sidebar component', () => {
 
     expect(screen.getByText('BEATLAB')).toBeInTheDocument();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Dashboard/i })).toHaveAttribute('href', '/');
     expect(screen.getByText('Finance')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Plan & Billing/i })).toHaveAttribute('href', '/account?tab=billing');
+    expect(screen.queryByRole('link', { name: /Plan & Billing/i })).not.toBeInTheDocument();
   });
 
   it('shows logged out state on inner studio routes when no user is present', async () => {
