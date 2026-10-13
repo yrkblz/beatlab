@@ -105,6 +105,8 @@ export default function Sidebar() {
 
       if (data) {
         setSubStatus(calculateSubscriptionStatus(data, user?.created_at));
+      } else {
+        setSubStatus(calculateSubscriptionStatus(null, user?.created_at));
       }
 
       if (error || !data || !data.full_name || !data.stage_name || !data.address || !data.base_currency) {

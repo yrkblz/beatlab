@@ -109,7 +109,7 @@ export default function AccountPage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user);
       if (user) {
-        fetchProfile(user.id);
+        fetchProfile(user.id, user);
       } else {
         setInitialLoading(false);
       }
@@ -129,7 +129,7 @@ export default function AccountPage() {
     };
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, currentUser?: User | null) => {
     try {
       const { data } = await supabase
         .from('profiles')
@@ -142,11 +142,14 @@ export default function AccountPage() {
         setStageName(data.stage_name || '');
         setAddress(data.address || '');
         setBaseCurrency(data.base_currency || 'USD');
-        const calculated = calculateSubscriptionStatus({
-          is_lifetime_paid: data.is_lifetime_paid,
-          trial_ends_at: data.trial_ends_at,
-          created_at: data.created_at,
-        });
+        const calculated = calculateSubscriptionStatus(
+          {
+            is_lifetime_paid: data.is_lifetime_paid,
+            trial_ends_at: data.trial_ends_at,
+            created_at: data.created_at,
+          },
+          currentUser?.created_at
+        );
         setSubStatus(calculated);
         if (calculated.isTrialExpired) {
           setShowExpiredModal(true);
@@ -161,9 +164,50 @@ export default function AccountPage() {
             }
           }
         }
+      } else {
+        // Brand new user without a profile in DB yet!
+        // Start 3-day trial from now
+        const trialEndDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+        const calculated = calculateSubscriptionStatus(
+          { trial_ends_at: trialEndDate },
+          currentUser?.created_at || new Date().toISOString()
+        );
+        setSubStatus(calculated);
+
+        const defaultName =
+          currentUser?.user_metadata?.full_name ||
+          currentUser?.user_metadata?.name ||
+          '';
+        if (defaultName) {
+          setFullName(defaultName);
+        }
+
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          if (!params.get('tab')) {
+            setActiveTab('profile');
+          }
+        }
+
+        // Auto-create initial profile row with trial_ends_at
+        await supabase
+          .from('profiles')
+          .upsert({
+            id: userId,
+            full_name: defaultName,
+            stage_name: defaultName,
+            address: '',
+            base_currency: 'USD',
+            trial_ends_at: trialEndDate,
+          });
       }
     } catch (err) {
       console.error('Error fetching profile:', err);
+      const calculated = calculateSubscriptionStatus(
+        null,
+        currentUser?.created_at || new Date().toISOString()
+      );
+      setSubStatus(calculated);
     } finally {
       setInitialLoading(false);
     }
@@ -369,15 +413,15 @@ export default function AccountPage() {
                   <ShieldCheck size={14} className="text-emerald-600" />
                   Lifetime Member
                 </span>
-              ) : subStatus?.isTrialActive ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
-                  <Clock size={13} className="text-blue-600 animate-pulse" />
-                  3-Day Free Trial
-                </span>
-              ) : (
+              ) : subStatus?.isTrialExpired ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 shrink-0">
                   <AlertTriangle size={13} className="text-rose-600" />
                   Trial Expired
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                  <Clock size={13} className="text-blue-600 animate-pulse" />
+                  3-Day Free Trial
                 </span>
               )}
             </div>
@@ -414,7 +458,38 @@ export default function AccountPage() {
                   </div>
                 </div>
               </div>
-            ) : subStatus?.isTrialActive ? (
+            ) : subStatus?.isTrialExpired ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl bg-rose-50/80 border border-rose-200/80 text-rose-900 text-xs leading-relaxed space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-rose-800 text-sm">
+                    <AlertTriangle size={15} />
+                    <span>Your 3-Day Free Trial Has Ended</span>
+                  </div>
+                  <p className="text-rose-700">
+                    Access to BEATLAB modules has expired. Upgrade now to unlock lifetime access across your entire producer workflow.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowExpiredModal(true)}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    View Lifetime Offer
+                  </button>
+
+                  <Link
+                    href="/upgrade"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-black hover:bg-neutral-800 text-white text-xs font-bold shadow-md transition-all shrink-0 cursor-pointer"
+                  >
+                    <Sparkles size={14} className="text-amber-400" />
+                    <span>Get Lifetime Access for $29</span>
+                    <ArrowRight size={14} />
+                  </Link>
+                </div>
+              </div>
+            ) : (
               <div className="space-y-5">
                 <div className="p-5 rounded-2xl bg-[#fbfbfd] border border-gray-200/90 text-center">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
@@ -472,37 +547,6 @@ export default function AccountPage() {
                   >
                     <Sparkles size={14} className="text-amber-400" />
                     <span>Get Lifetime Access ($29)</span>
-                    <ArrowRight size={14} />
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-rose-50/80 border border-rose-200/80 text-rose-900 text-xs leading-relaxed space-y-1">
-                  <div className="flex items-center gap-1.5 font-bold text-rose-800 text-sm">
-                    <AlertTriangle size={15} />
-                    <span>Your 3-Day Free Trial Has Ended</span>
-                  </div>
-                  <p className="text-rose-700">
-                    Access to BEATLAB modules has expired. Upgrade now to unlock lifetime access across your entire producer workflow.
-                  </p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowExpiredModal(true)}
-                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors cursor-pointer"
-                  >
-                    View Lifetime Offer
-                  </button>
-
-                  <Link
-                    href="/upgrade"
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-black hover:bg-neutral-800 text-white text-xs font-bold shadow-md transition-all shrink-0 cursor-pointer"
-                  >
-                    <Sparkles size={14} className="text-amber-400" />
-                    <span>Get Lifetime Access for $29</span>
                     <ArrowRight size={14} />
                   </Link>
                 </div>

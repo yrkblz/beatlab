@@ -249,4 +249,37 @@ describe('Account & Settings Page (/account)', () => {
 
     expect(screen.queryByTestId('panel-billing')).not.toBeInTheDocument();
   });
+
+  it('initializes active 3-day trial for brand new user with no profile row in database', async () => {
+    const mockUser = {
+      id: 'usr-first-time',
+      email: 'firstlogin@beatlab.space',
+      created_at: new Date().toISOString(),
+      user_metadata: { full_name: 'New Producer' },
+    };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });
+
+    // Profile table returns null (no row found)
+    mockSingle.mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST116', message: 'The result contains 0 rows' },
+    });
+
+    await act(async () => {
+      render(<AccountPage />);
+    });
+
+    // Default to Profile tab
+    expect(screen.getByTestId('panel-profile')).toBeInTheDocument();
+
+    // Switch to Billing tab
+    act(() => {
+      fireEvent.click(screen.getByTestId('tab-billing'));
+    });
+
+    // It MUST be an active 3-Day Free Trial, NOT expired!
+    expect(screen.getByText(/3-Day Free Trial/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Trial Expired/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Your 3-Day Free Trial Has Ended/i)).not.toBeInTheDocument();
+  });
 });
