@@ -379,10 +379,10 @@ export default function PublisherPage() {
                       'Social Auto-Publisher is launching soon! We are awaiting final API review and developer credentials from TikTok and Instagram.'
                     )
                   }
-                  className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-md flex justify-center items-center text-sm cursor-pointer"
+                  className="w-full bg-blue-600 text-white px-4 py-3.5 rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-md flex items-center justify-center gap-2 text-center text-sm cursor-pointer"
                 >
-                  <Clock size={16} className="mr-2" />
-                  Coming Soon (Awaiting API Keys)
+                  <Clock size={16} className="shrink-0" />
+                  <span>Coming Soon (Awaiting API Keys)</span>
                 </button>
                 <p className="text-[11px] text-center text-gray-400">
                   Upload & configuration are enabled in preview mode.

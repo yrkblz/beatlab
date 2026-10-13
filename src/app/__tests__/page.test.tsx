@@ -84,7 +84,7 @@ describe('BEATLAB Landing Page (Guest View)', () => {
 
   it('renders trust indicators and trial guarantees', () => {
     render(<Home />);
-    expect(screen.getByText(/free 14-day trial/i)).toBeInTheDocument();
+    expect(screen.getByText(/free 3-day trial/i)).toBeInTheDocument();
     expect(screen.getByText(/no credit card required/i)).toBeInTheDocument();
     expect(screen.getByText(/instant studio setup/i)).toBeInTheDocument();
   });

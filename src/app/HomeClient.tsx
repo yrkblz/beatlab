@@ -342,7 +342,7 @@ export function LandingPage() {
         {/* Micro-trust indicators */}
         <div className="mt-8 flex flex-wrap items-center justify-center gap-y-2 gap-x-6 text-xs text-gray-500">
           <span className="flex items-center gap-1.5 transition-colors hover:text-gray-900">
-            <CheckCircle size={15} className="text-emerald-500" aria-hidden="true" /> Free 14-day trial
+            <CheckCircle size={15} className="text-emerald-500" aria-hidden="true" /> Free 3-day trial
           </span>
           <span className="flex items-center gap-1.5 transition-colors hover:text-gray-900">
             <CheckCircle size={15} className="text-emerald-500" aria-hidden="true" /> No credit card required
