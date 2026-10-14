@@ -58,3 +58,5 @@ remove_scroll.js
 replace_confirm.js
 replace_select.js
 restore.js
+
+.env*
