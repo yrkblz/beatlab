@@ -42,17 +42,26 @@ export default function MailerPage() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) {
-        loadSupabaseBeats();
+      if (session?.user) {
+        loadSupabaseBeats(session.user.id);
         if (session.provider_token) loadDriveFiles(session.provider_token, 'root');
+        if (activeTab === 'stats') {
+          fetchCampaignStats(session.user.id);
+        }
       }
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
-      if (session) {
-        loadSupabaseBeats();
+      if (session?.user) {
+        loadSupabaseBeats(session.user.id);
         if (session.provider_token) loadDriveFiles(session.provider_token, 'root');
+        if (activeTab === 'stats') {
+          fetchCampaignStats(session.user.id);
+        }
+      } else {
+        setCampaigns([]);
+        setSupabaseBeats([]);
       }
     });
 
@@ -62,10 +71,10 @@ export default function MailerPage() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'stats') {
-      fetchCampaignStats();
+    if (activeTab === 'stats' && session?.user?.id) {
+      fetchCampaignStats(session.user.id);
     }
-  }, [activeTab]);
+  }, [activeTab, session?.user?.id]);
 
   // Undo Timer
   useEffect(() => {
@@ -75,24 +84,47 @@ export default function MailerPage() {
         setUndoSecondsLeft(prev => prev - 1);
       }, 1000);
     } else if (pendingDelete && undoSecondsLeft === 0) {
-      // Time elapsed - delete from database
-      supabase.from('campaigns').delete().in('id', pendingDelete.ids).then(() => {
+      // Time elapsed - delete from database (only for the current logged-in user)
+      let query = supabase.from('campaigns').delete().in('id', pendingDelete.ids);
+      if (session?.user?.id) {
+        query = query.eq('user_id', session.user.id);
+      }
+      query.then(() => {
         setPendingDelete(null);
         setSelectedCampaignIds([]);
       });
     }
     return () => clearInterval(interval);
-  }, [pendingDelete, undoSecondsLeft]);
+  }, [pendingDelete, undoSecondsLeft, session?.user?.id]);
 
-  async function fetchCampaignStats() {
+  async function fetchCampaignStats(userId?: string) {
+    const targetUserId = userId || session?.user?.id;
+    if (!targetUserId) {
+      setCampaigns([]);
+      return;
+    }
     setLoadingStats(true);
-    const { data, error } = await supabase
-      .from('campaigns')
-      .select(`*, email_logs ( id, recipient_email, opened, opened_at )`)
-      .order('created_at', { ascending: false });
-      
-    if (data) setCampaigns(data);
-    setLoadingStats(false);
+    try {
+      const { data, error } = await supabase
+        .from('campaigns')
+        .select(`*, email_logs ( id, recipient_email, opened, opened_at )`)
+        .eq('user_id', targetUserId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        // If column user_id is not yet created or error occurs,
+        // NEVER expose other users' campaigns!
+        console.error('Error fetching user campaigns:', error);
+        setCampaigns([]);
+      } else {
+        setCampaigns(data || []);
+      }
+    } catch (err) {
+      console.error('Campaign stats fetch error:', err);
+      setCampaigns([]);
+    } finally {
+      setLoadingStats(false);
+    }
   }
 
   function initiateDeletion(ids: string[]) {
@@ -140,8 +172,17 @@ export default function MailerPage() {
     }
   }
 
-  async function loadSupabaseBeats() {
-    const { data } = await supabase.from('beats').select('*').order('created_at', { ascending: false });
+  async function loadSupabaseBeats(userId?: string) {
+    const targetUserId = userId || session?.user?.id;
+    if (!targetUserId) {
+      setSupabaseBeats([]);
+      return;
+    }
+    const { data } = await supabase
+      .from('beats')
+      .select('*')
+      .eq('user_id', targetUserId)
+      .order('created_at', { ascending: false });
     if (data) setSupabaseBeats(data);
   }
 
@@ -220,7 +261,8 @@ export default function MailerPage() {
           message,
           attachments: selectedAttachments,
           accessToken: session.provider_token,
-          senderEmail: session.user.email
+          senderEmail: session.user.email,
+          userId: session.user.id
         })
       });
 

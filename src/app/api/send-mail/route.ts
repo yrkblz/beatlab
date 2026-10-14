@@ -15,7 +15,7 @@ function createMimeMessage(to: string, subject: string, html: string) {
 
 export async function POST(request: Request) {
   try {
-    const { emails, subject, message, accessToken, senderEmail, campaignName, attachments } = await request.json();
+    const { emails, subject, message, accessToken, senderEmail, campaignName, attachments, userId } = await request.json();
     const host = request.headers.get('host') || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const origin = `${protocol}://${host}`;
@@ -27,8 +27,16 @@ export async function POST(request: Request) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-    // 1. Save Campaign in Supabase (using subject as campaign identifier)
-    const campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
+    // 1. Save Campaign in Supabase (scoped to userId for user isolation)
+    const campaignBody: Record<string, any> = {
+      subject: campaignName,
+      total_sent: emails.length,
+    };
+    if (userId) {
+      campaignBody.user_id = userId;
+    }
+
+    let campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
       method: 'POST',
       headers: {
         'apikey': supabaseKey,
@@ -36,9 +44,29 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json',
         'Prefer': 'return=representation'
       },
-      body: JSON.stringify({ subject: campaignName, total_sent: emails.length })
+      body: JSON.stringify(campaignBody)
     });
-    const campaignData = await campaignRes.json();
+    let campaignData = await campaignRes.json();
+
+    // Graceful fallback if user_id column has not yet been added to Supabase table
+    if (!campaignRes.ok && campaignData?.message?.includes('user_id')) {
+      campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({ subject: campaignName, total_sent: emails.length })
+      });
+      campaignData = await campaignRes.json();
+    }
+
+    if (!campaignRes.ok || !campaignData || !campaignData[0]) {
+      throw new Error(campaignData?.message || 'Failed to create campaign in database');
+    }
+
     const campaignId = campaignData[0].id;
 
     // Prepare HTML block for attachments (similar to Google Drive attachment cards)
