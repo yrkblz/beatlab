@@ -28,13 +28,15 @@ export async function POST(req: Request) {
             product_data: {
               name: 'BEATLAB Studio Suite – Lifetime Access',
               description: 'Lifetime access to all BEATLAB modules: Placement CRM, License Generator, Beat Catalog, Mailer, Lead Finder, Social Publisher, and Financial Analytics.',
-              tax_code: 'txcd_10202000',
             },
             unit_amount: LIFETIME_PRICE_CENTS,
           },
           quantity: 1,
         },
       ],
+      automatic_tax: {
+        enabled: false,
+      },
       metadata: {
         userId: userId || '',
         userEmail: userEmail || '',
