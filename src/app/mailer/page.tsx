@@ -24,7 +24,19 @@ export default function MailerPage() {
   // Google Drive
   const [driveFiles, setDriveFiles] = useState<any[]>([]);
   const [loadingDrive, setLoadingDrive] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
   const [driveHistory, setDriveHistory] = useState<{id: string, name: string}[]>([{id: 'root', name: 'My Drive'}]);
+
+  async function reconnectGoogleDrive() {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.href,
+        scopes: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/drive.readonly',
+        queryParams: { access_type: 'offline', prompt: 'consent' }
+      }
+    });
+  }
 
   // Campaign Statistics
   const [campaigns, setCampaigns] = useState<any[]>([]);
@@ -188,17 +200,23 @@ export default function MailerPage() {
 
   async function loadDriveFiles(token: string, folderId: string) {
     setLoadingDrive(true);
+    setDriveError(null);
     try {
-      const query = `trashed = false and '${folderId}' in parents and (mimeType contains 'audio/' or mimeType contains 'application/zip' or mimeType contains 'application/x-zip' or mimeType = 'application/vnd.google-apps.folder')`;
+      const query = `trashed = false and '${folderId}' in parents and (mimeType contains 'audio/' or mimeType contains 'application/zip' or mimeType contains 'application/x-zip' or name contains '.mp3' or name contains '.wav' or name contains '.zip' or name contains '.rar' or mimeType = 'application/vnd.google-apps.folder')`;
       const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,webViewLink,iconLink)&orderBy=folder,modifiedTime desc`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      if (data.files) {
+      if (data.error) {
+        console.error('Error fetching from Google Drive', data.error);
+        setDriveError(data.error.message || 'Google Drive session expired or permission denied.');
+        setDriveFiles([]);
+      } else if (data.files) {
         setDriveFiles(data.files);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching from Google Drive', err);
+      setDriveError('Failed to connect to Google Drive.');
     }
     setLoadingDrive(false);
   }
@@ -438,7 +456,15 @@ export default function MailerPage() {
                     <button onClick={() => setAttachmentSource('supabase')} className={`flex-1 flex items-center justify-center py-1.5 text-sm font-medium rounded-md transition-colors ${attachmentSource === 'supabase' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}>
                       <Music2 size={16} className="mr-2" /> Beat Catalog
                     </button>
-                    <button onClick={() => setAttachmentSource('drive')} className={`flex-1 flex items-center justify-center py-1.5 text-sm font-medium rounded-md transition-colors ${attachmentSource === 'drive' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}>
+                    <button 
+                      onClick={() => {
+                        setAttachmentSource('drive');
+                        if (session?.provider_token && driveFiles.length === 0 && !loadingDrive) {
+                          loadDriveFiles(session.provider_token, driveHistory[driveHistory.length - 1].id);
+                        }
+                      }} 
+                      className={`flex-1 flex items-center justify-center py-1.5 text-sm font-medium rounded-md transition-colors ${attachmentSource === 'drive' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}
+                    >
                       <HardDrive size={16} className="mr-2" /> Google Drive
                     </button>
                   </div>
@@ -472,10 +498,51 @@ export default function MailerPage() {
                         <span className="font-medium truncate flex-1">
                           {driveHistory[driveHistory.length - 1].name}
                         </span>
+                        {session?.provider_token && (
+                          <button
+                            type="button"
+                            onClick={() => loadDriveFiles(session.provider_token!, driveHistory[driveHistory.length - 1].id)}
+                            className="text-xs text-blue-600 hover:text-blue-800 ml-2 font-medium"
+                            title="Refresh folder"
+                          >
+                            Refresh
+                          </button>
+                        )}
                       </div>
 
                       <div className="space-y-1 flex-1 overflow-y-auto">
-                        {loadingDrive ? <p className="text-center text-gray-500 text-sm mt-8">Loading content...</p> : driveFiles.length === 0 ? <p className="text-center text-gray-500 text-sm mt-8">This folder is empty or has no audio/zip files.</p> : driveFiles.map(file => {
+                        {!session?.provider_token || driveError ? (
+                          <div className="text-center py-8 px-4 flex flex-col items-center">
+                            <HardDrive size={32} className="text-gray-400 mb-2" />
+                            <p className="text-sm font-semibold text-gray-800 mb-1">
+                              Google Drive Authorization Needed
+                            </p>
+                            <p className="text-xs text-gray-500 max-w-xs mb-4">
+                              {driveError || 'Connect your Google Drive with read permissions to attach audio and zip files.'}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={reconnectGoogleDrive}
+                              className="inline-flex items-center gap-2 bg-black hover:bg-neutral-800 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer"
+                            >
+                              <HardDrive size={14} /> Connect Google Drive
+                            </button>
+                          </div>
+                        ) : loadingDrive ? (
+                          <p className="text-center text-gray-500 text-sm mt-8">Loading content...</p>
+                        ) : driveFiles.length === 0 ? (
+                          <div className="text-center py-8 px-4 flex flex-col items-center">
+                            <p className="text-gray-500 text-sm mb-2">This folder is empty or has no audio/zip files.</p>
+                            <button
+                              type="button"
+                              onClick={reconnectGoogleDrive}
+                              className="text-xs text-blue-600 hover:underline cursor-pointer"
+                            >
+                              Re-authorize Google Drive &rarr;
+                            </button>
+                          </div>
+                        ) : (
+                          driveFiles.map(file => {
                             const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
                             const isSelected = selectedAttachments.some(a => a.link === file.webViewLink);
                             
@@ -495,7 +562,8 @@ export default function MailerPage() {
                                 </div>
                               );
                             }
-                          })}
+                          })
+                        )}
                       </div>
                     </div>
                   )}
