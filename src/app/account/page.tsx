@@ -18,12 +18,12 @@ import {
 } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
-import { calculateSubscriptionStatus, type SubscriptionStatus } from '@/lib/subscription';
+import { calculateSubscriptionStatus, isProfileComplete, MANDATORY_PROFILE_CURRENCIES, type SubscriptionStatus } from '@/lib/subscription';
 import TrialExpiredModal from '@/components/TrialExpiredModal';
 
-const CURRENCIES = ['USD', 'PLN', 'EUR', 'RUB', 'UAH'];
+const CURRENCIES = MANDATORY_PROFILE_CURRENCIES;
 
-function CustomSelect({ options, value, onChange, placeholder }: { options: string[], value: string, onChange: (v: string) => void, placeholder?: string }) {
+function CustomSelect({ options, value, onChange, placeholder }: { options: readonly string[] | string[], value: string, onChange: (v: string) => void, placeholder?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -141,7 +141,7 @@ export default function AccountPage() {
         setFullName(data.full_name || '');
         setStageName(data.stage_name || '');
         setAddress(data.address || '');
-        setBaseCurrency(data.base_currency || 'USD');
+        setBaseCurrency((data.base_currency || 'USD').trim().toUpperCase());
         const calculated = calculateSubscriptionStatus(
           {
             is_lifetime_paid: data.is_lifetime_paid,
@@ -156,7 +156,7 @@ export default function AccountPage() {
         }
 
         // If user profile details are incomplete and user did not explicitly request billing tab, open profile tab
-        if (!data.full_name || !data.stage_name || !data.address || !data.base_currency) {
+        if (!isProfileComplete(data)) {
           if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
             if (!params.get('tab')) {
@@ -189,13 +189,13 @@ export default function AccountPage() {
           }
         }
 
-        // Auto-create initial profile row with trial_ends_at
+        // Auto-create initial profile row with trial_ends_at (stage_name empty to require producer onboarding)
         await supabase
           .from('profiles')
           .upsert({
             id: userId,
             full_name: defaultName,
-            stage_name: defaultName,
+            stage_name: '',
             address: '',
             base_currency: 'USD',
             trial_ends_at: trialEndDate,
@@ -258,22 +258,46 @@ export default function AccountPage() {
     if (!user) return;
     setSaving(true);
 
+    const trimmedFullName = fullName.trim();
+    const trimmedStageName = stageName.trim();
+    const trimmedCurrency = baseCurrency.trim().toUpperCase();
+
+    if (!trimmedFullName || !trimmedStageName || !MANDATORY_PROFILE_CURRENCIES.includes(trimmedCurrency)) {
+      alert('Please fill in all mandatory fields: Full Legal Name, Stage Name, and a valid Base Currency.');
+      setSaving(false);
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
-          full_name: fullName,
-          stage_name: stageName,
-          address,
-          base_currency: baseCurrency,
+          full_name: trimmedFullName,
+          stage_name: trimmedStageName,
+          address: address.trim(),
+          base_currency: trimmedCurrency,
           updated_at: new Date().toISOString(),
         });
 
       if (error) {
         alert('Error saving profile: ' + error.message);
       } else {
+        setFullName(trimmedFullName);
+        setStageName(trimmedStageName);
+        setBaseCurrency(trimmedCurrency);
         setSavedSuccess(true);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('beatlab:profile-updated', {
+              detail: {
+                full_name: trimmedFullName,
+                stage_name: trimmedStageName,
+                base_currency: trimmedCurrency,
+              },
+            })
+          );
+        }
         setTimeout(() => {
           setSavedSuccess(false);
         }, 3000);
@@ -287,10 +311,11 @@ export default function AccountPage() {
 
   async function handleGoogleLogin() {
     setLoadingAuth(true);
+    const destination = typeof window !== 'undefined' ? `${window.location.origin}/account` : '/';
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: destination,
         scopes: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/drive.readonly',
         queryParams: { access_type: 'offline', prompt: 'consent' }
       }
@@ -573,6 +598,7 @@ export default function AccountPage() {
             role="tabpanel"
             aria-labelledby="tab-profile"
             data-testid="panel-profile"
+            noValidate
             onSubmit={handleSave}
             className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm space-y-6"
           >
@@ -608,6 +634,27 @@ export default function AccountPage() {
               </div>
             </div>
 
+            {!isProfileComplete({ full_name: fullName, stage_name: stageName, base_currency: baseCurrency }) && (
+              <div
+                data-testid="onboarding-notice"
+                className="bg-blue-50 border border-blue-200/80 rounded-2xl p-4 sm:p-5 mb-6 text-blue-900 animate-in fade-in duration-200"
+              >
+                <div className="flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 shrink-0">
+                    <Sparkles size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-blue-900 mb-1">
+                      Welcome to BEATLAB! Complete your producer profile
+                    </h3>
+                    <p className="text-xs text-blue-700 leading-relaxed">
+                      Completing your producer details (Legal Name, Stage Name, and Base Currency) is required to unlock the studio tools suite.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Full Legal Name *</label>
               <input 
@@ -633,13 +680,14 @@ export default function AccountPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Address *</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                Address <span className="text-xs font-normal text-gray-400">(optional)</span>
+              </label>
               <textarea 
-                required
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 className="w-full bg-[#fbfbfd] border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-black focus:bg-white transition-colors"
-                placeholder="e.g. 123 Music Lane, Los Angeles, CA 90001"
+                placeholder="e.g. 123 Music Lane, Los Angeles, CA 90001 (optional)"
                 rows={3}
               />
             </div>

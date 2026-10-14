@@ -408,4 +408,113 @@ describe('Sidebar component', () => {
     expect(container?.firstChild).toBeNull();
     expect(screen.queryByText('BEATLAB')).not.toBeInTheDocument();
   });
+
+  it('does not redirect to /account when user trial is expired, allowing StudioGuard paywall blocker to remain active on studio routes', async () => {
+    (usePathname as jest.Mock).mockReturnValue('/bity');
+    const expiredUser = { id: 'usr-expired', email: 'expired@producer.io' };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: expiredUser } });
+
+    // Incomplete profile BUT expired trial
+    mockSingle.mockResolvedValue({
+      data: {
+        full_name: '',
+        stage_name: '',
+        address: '',
+        base_currency: 'USD',
+        is_lifetime_paid: false,
+        trial_ends_at: new Date(Date.now() - 100000).toISOString(), // expired!
+      },
+      error: null,
+    });
+
+    await act(async () => {
+      render(<Sidebar />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('expired@producer.io')).toBeInTheDocument();
+    });
+
+    // Sidebar MUST NOT push /account so user remains on /bity to see PaywallBlocker
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByText(/Expired • Upgrade/i)).toBeInTheDocument();
+  });
+
+  it('re-verifies profile and updates state when beatlab:profile-updated event is dispatched', async () => {
+    (usePathname as jest.Mock).mockReturnValue('/bity');
+    const mockUser = { id: 'usr-onboard', email: 'producer@beatlab.io' };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });
+
+    // Initially incomplete profile
+    mockSingle.mockResolvedValueOnce({
+      data: { full_name: '', stage_name: '', address: '', base_currency: 'USD' },
+      error: null,
+    });
+
+    await act(async () => {
+      render(<Sidebar />);
+    });
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/account');
+    });
+
+    mockPush.mockClear();
+
+    // Now user saves profile on /account -> Supabase profile is now complete
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        full_name: 'Metro Boomin',
+        stage_name: 'Metro',
+        address: '123 Studio Way',
+        base_currency: 'USD',
+        is_lifetime_paid: true,
+      },
+      error: null,
+    });
+
+    // Event is dispatched
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('beatlab:profile-updated'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Lifetime Access')).toBeInTheDocument();
+    });
+
+    // Should NOT redirect to /account anymore
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('skips redirect logic when user is on /account with search query parameters like ?tab=profile', async () => {
+    (usePathname as jest.Mock).mockReturnValue('/account?tab=profile');
+    const mockUser = { id: 'usr-acct-tab', email: 'tab@producer.io' };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });
+    mockSingle.mockResolvedValue({ data: null, error: new Error('Missing profile') });
+
+    await act(async () => {
+      render(<Sidebar />);
+    });
+
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('suppresses rendering on standalone routes with query parameters like /login?next=/bity and /upgrade?plan=lifetime', async () => {
+    const mockUser = { id: 'usr-query', email: 'query@producer.io' };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });
+
+    for (const route of [
+      '/login?next=%2Fbity',
+      '/upgrade?plan=lifetime',
+      '/checkout/success?session_id=cs_123',
+    ]) {
+      (usePathname as jest.Mock).mockReturnValue(route);
+      let container: any = null;
+      await act(async () => {
+        const res = render(<Sidebar />);
+        container = res.container;
+      });
+      expect(container?.firstChild).toBeNull();
+    }
+  });
 });

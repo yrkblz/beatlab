@@ -10,7 +10,7 @@ interface PaywallBlockerProps {
 
 export default function PaywallBlocker({ toolName = 'this module' }: PaywallBlockerProps) {
   return (
-    <div className="min-h-[70vh] flex items-center justify-center p-4">
+    <div data-testid="paywall-blocker" className="min-h-[70vh] flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white border border-gray-200/90 rounded-3xl p-8 sm:p-10 shadow-xl text-center animate-in fade-in zoom-in-95 duration-200">
         <div className="w-16 h-16 rounded-2xl bg-black text-white flex items-center justify-center mx-auto mb-6 shadow-md shadow-black/10">
           <Lock size={28} className="text-amber-400" />

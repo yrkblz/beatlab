@@ -12,6 +12,8 @@ const mockSingle = jest.fn();
 const mockEq = jest.fn(() => ({ single: mockSingle }));
 const mockSelect = jest.fn(() => ({ eq: mockEq }));
 
+const mockUpsert = jest.fn().mockResolvedValue({ error: null });
+
 jest.mock('@/lib/supabase', () => ({
   supabase: {
     auth: {
@@ -22,7 +24,7 @@ jest.mock('@/lib/supabase', () => ({
     },
     from: jest.fn(() => ({
       select: mockSelect,
-      upsert: jest.fn().mockResolvedValue({ error: null }),
+      upsert: mockUpsert,
     })),
   },
 }));
@@ -269,8 +271,9 @@ describe('Account & Settings Page (/account)', () => {
       render(<AccountPage />);
     });
 
-    // Default to Profile tab
+    // Default to Profile tab and show onboarding notice for new producer
     expect(screen.getByTestId('panel-profile')).toBeInTheDocument();
+    expect(screen.getByTestId('onboarding-notice')).toBeInTheDocument();
 
     // Switch to Billing tab
     act(() => {
@@ -281,5 +284,248 @@ describe('Account & Settings Page (/account)', () => {
     expect(screen.getByText(/3-Day Free Trial/i)).toBeInTheDocument();
     expect(screen.queryByText(/Trial Expired/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Your 3-Day Free Trial Has Ended/i)).not.toBeInTheDocument();
+  });
+
+  it('displays welcoming onboarding notice on /account when profile fields are incomplete', async () => {
+    const mockUser = {
+      id: 'usr-incomplete',
+      email: 'producer@beatlab.space',
+      created_at: new Date().toISOString(),
+    };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });
+
+    mockSingle.mockResolvedValue({
+      data: {
+        full_name: '',
+        stage_name: '',
+        address: '',
+        base_currency: 'USD',
+        is_lifetime_paid: false,
+        trial_ends_at: new Date(Date.now() + 86400000).toISOString(),
+      },
+      error: null,
+    });
+
+    await act(async () => {
+      render(<AccountPage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('onboarding-notice')).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByText(/Welcome to BEATLAB! Complete your producer profile/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Completing your producer details.*is required to unlock/i)
+    ).toBeInTheDocument();
+
+    // Verify Address textarea is NOT marked as required
+    const addressInput = screen.getByPlaceholderText(/e\.g\. 123 Music Lane/i);
+    expect(addressInput).not.toBeRequired();
+  });
+
+  it('displays onboarding notice when base_currency is not in mandatory supported list', async () => {
+    const mockUser = {
+      id: 'usr-bad-curr',
+      email: 'producer@beatlab.space',
+      created_at: new Date().toISOString(),
+    };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });
+
+    mockSingle.mockResolvedValue({
+      data: {
+        full_name: 'Metro Boomin',
+        stage_name: 'Metro',
+        address: '',
+        base_currency: 'GBP', // not supported by BEATLAB mandatory profile currencies
+        is_lifetime_paid: false,
+        trial_ends_at: new Date(Date.now() + 86400000).toISOString(),
+      },
+      error: null,
+    });
+
+    await act(async () => {
+      render(<AccountPage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('onboarding-notice')).toBeInTheDocument();
+    });
+  });
+
+  it('does not display onboarding notice when profile is already complete', async () => {
+    const mockUser = {
+      id: 'usr-complete',
+      email: 'producer@beatlab.space',
+      created_at: new Date().toISOString(),
+    };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });
+
+    mockSingle.mockResolvedValue({
+      data: {
+        full_name: 'Metro Boomin',
+        stage_name: 'Metro',
+        address: '', // empty address is valid
+        base_currency: 'USD',
+        is_lifetime_paid: true,
+        trial_ends_at: null,
+      },
+      error: null,
+    });
+
+    await act(async () => {
+      render(<AccountPage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Metro Boomin')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId('onboarding-notice')).not.toBeInTheDocument();
+  });
+
+  it('trims whitespace on profile save and dispatches beatlab:profile-updated event', async () => {
+    const mockUser = {
+      id: 'usr-save',
+      email: 'producer@beatlab.space',
+      created_at: new Date().toISOString(),
+    };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });
+
+    mockSingle.mockResolvedValue({
+      data: {
+        full_name: '',
+        stage_name: '',
+        address: '',
+        base_currency: 'USD',
+        is_lifetime_paid: false,
+        trial_ends_at: new Date(Date.now() + 86400000).toISOString(),
+      },
+      error: null,
+    });
+
+    const eventListener = jest.fn();
+    window.addEventListener('beatlab:profile-updated', eventListener);
+
+    await act(async () => {
+      render(<AccountPage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('panel-profile')).toBeInTheDocument();
+    });
+
+    // Fill in form with extra surrounding whitespace
+    const fullNameInput = screen.getByPlaceholderText(/e\.g\. John Doe/i);
+    const stageNameInput = screen.getByPlaceholderText(/e\.g\. Metro Boomin/i);
+
+    fireEvent.change(fullNameInput, { target: { value: '   Metro Boomin   ' } });
+    fireEvent.change(stageNameInput, { target: { value: '   Metro   ' } });
+
+    const submitBtn = screen.getByRole('button', { name: /Save Settings/i });
+
+    await act(async () => {
+      fireEvent.click(submitBtn);
+    });
+
+    // Upsert should have been called with trimmed strings
+    expect(mockUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'usr-save',
+        full_name: 'Metro Boomin',
+        stage_name: 'Metro',
+        base_currency: 'USD',
+      })
+    );
+
+    // Event should have been dispatched with trimmed details
+    expect(eventListener).toHaveBeenCalled();
+    const eventDetail = eventListener.mock.calls[0][0].detail;
+    expect(eventDetail).toEqual({
+      full_name: 'Metro Boomin',
+      stage_name: 'Metro',
+      base_currency: 'USD',
+    });
+
+    window.removeEventListener('beatlab:profile-updated', eventListener);
+  });
+
+  it('blocks save and alerts user when mandatory fields are only whitespace', async () => {
+    const mockUser = {
+      id: 'usr-whitespace',
+      email: 'producer@beatlab.space',
+      created_at: new Date().toISOString(),
+    };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });
+    mockSingle.mockResolvedValue({
+      data: {
+        full_name: '',
+        stage_name: '',
+        address: '',
+        base_currency: 'USD',
+        is_lifetime_paid: false,
+        trial_ends_at: new Date(Date.now() + 86400000).toISOString(),
+      },
+      error: null,
+    });
+
+    const alertMock = jest.spyOn(window, 'alert').mockImplementation(() => {});
+
+    await act(async () => {
+      render(<AccountPage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('panel-profile')).toBeInTheDocument();
+    });
+
+    mockUpsert.mockClear();
+
+    const fullNameInput = screen.getByPlaceholderText(/e\.g\. John Doe/i);
+    fireEvent.change(fullNameInput, { target: { value: '    ' } });
+
+    const submitBtn = screen.getByRole('button', { name: /Save Settings/i });
+    await act(async () => {
+      fireEvent.click(submitBtn);
+    });
+
+    expect(alertMock).toHaveBeenCalledWith(
+      expect.stringContaining('Please fill in all mandatory fields')
+    );
+    expect(mockUpsert).not.toHaveBeenCalled();
+
+    alertMock.mockRestore();
+  });
+
+  it('normalizes lowercase currency loaded from database into uppercase matching supported list', async () => {
+    const mockUser = {
+      id: 'usr-lower-curr',
+      email: 'lower@beatlab.space',
+      created_at: new Date().toISOString(),
+    };
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });
+    mockSingle.mockResolvedValue({
+      data: {
+        full_name: 'Metro Boomin',
+        stage_name: 'Metro',
+        address: '',
+        base_currency: 'eur', // lowercase in DB
+        is_lifetime_paid: true,
+        trial_ends_at: null,
+      },
+      error: null,
+    });
+
+    await act(async () => {
+      render(<AccountPage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('EUR')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId('onboarding-notice')).not.toBeInTheDocument();
   });
 });

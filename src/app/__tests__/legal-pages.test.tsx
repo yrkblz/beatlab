@@ -168,6 +168,56 @@ describe('Legal Compliance Pages and Footer Links', () => {
       expect(screen.getByRole('link', { name: /Cookie Policy/i })).toHaveAttribute('href', '/cookies');
     });
 
+    it('redirects authenticated user on LoginPage to preserved destination or falls back safely', async () => {
+      const mockReplace = jest.fn();
+      const mockPush = jest.fn();
+      const { useRouter } = require('next/navigation');
+      (useRouter as jest.Mock).mockReturnValue({ replace: mockReplace, push: mockPush });
+
+      (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+        data: { user: { id: 'usr-1', email: 'auth@beatlab.space' } },
+      });
+
+      // Test valid destination
+      delete (window as any).location;
+      (window as any).location = new URL('http://localhost:3000/login?next=%2Flicenses%3Ftab%3Dcustom');
+
+      await act(async () => {
+        render(<LoginPage />);
+      });
+
+      expect(mockReplace).toHaveBeenCalledWith('/licenses?tab=custom');
+
+      // Test open redirect exploit attempt (//evil.com) -> must sanitize to /
+      mockReplace.mockClear();
+      (window as any).location = new URL('http://localhost:3000/login?next=%2F%2Fevil.com');
+
+      await act(async () => {
+        render(<LoginPage />);
+      });
+
+      expect(mockReplace).toHaveBeenCalledWith('/');
+
+      // Test redirect loop attempts (/login, /login/, /login?foo, /login#hash) -> must sanitize to /
+      for (const loopUrl of [
+        'http://localhost:3000/login?next=%2Flogin',
+        'http://localhost:3000/login?next=%2Flogin%2F',
+        'http://localhost:3000/login?next=%2Flogin%3Ffoo%3Dbar',
+        'http://localhost:3000/login?next=%2Flogin%23hash',
+      ]) {
+        mockReplace.mockClear();
+        (window as any).location = new URL(loopUrl);
+
+        await act(async () => {
+          render(<LoginPage />);
+        });
+
+        expect(mockReplace).toHaveBeenCalledWith('/');
+      }
+
+      (window as any).location = new URL('http://localhost:3000/');
+    });
+
     it('suppresses Sidebar completely on standalone routes even with trailing slashes, mixed-case paths, and for authenticated users', async () => {
       const mockUser = { id: 'u-auth', email: 'user@beathelper.com' };
       (supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser } });

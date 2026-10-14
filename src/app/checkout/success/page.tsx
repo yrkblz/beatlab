@@ -27,6 +27,14 @@ function SuccessContent() {
               paid_at: new Date().toISOString(),
             })
             .eq('id', targetId);
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('beatlab:profile-updated', {
+                detail: { is_lifetime_paid: true },
+              })
+            );
+          }
         }
       } catch (err) {
         console.error('Error activating lifetime plan:', err);

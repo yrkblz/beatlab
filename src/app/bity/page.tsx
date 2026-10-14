@@ -136,7 +136,7 @@ export default function BityPage() {
       <div className="max-w-7xl mx-auto pb-12 text-center mt-20">
         <h2 className="text-2xl font-bold mb-4">Please log in</h2>
         <p className="text-gray-500">You need to log in to view and manage your beats.</p>
-        <a href="/account" className="inline-block mt-6 px-6 py-2 bg-black text-white rounded-lg font-medium">Go to Login</a>
+        <a href="/login?next=%2Fbity" className="inline-block mt-6 px-6 py-2 bg-black text-white rounded-lg font-medium">Go to Login</a>
       </div>
     );
   }

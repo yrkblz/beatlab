@@ -48,6 +48,22 @@ export default function UpgradePage() {
     }
 
     loadData();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        if (currentUser) {
+          loadData();
+        } else {
+          setSubStatus(null);
+        }
+      }
+    );
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
   async function handleCheckout() {

@@ -1,19 +1,63 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Sparkles, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const getNextDestination = () => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const next = params.get('next');
+      if (next) {
+        try {
+          const decoded = decodeURIComponent(next).trim();
+          if (
+            decoded.startsWith('/') &&
+            !decoded.startsWith('//') &&
+            !decoded.startsWith('/\\')
+          ) {
+            const normalized = decoded.toLowerCase().replace(/\/+$/, '') || '/';
+            if (
+              normalized !== '/login' &&
+              !normalized.startsWith('/login?') &&
+              !normalized.startsWith('/login#') &&
+              !normalized.startsWith('/login/')
+            ) {
+              return decoded;
+            }
+          }
+        } catch {
+          return '/';
+        }
+      }
+    }
+    return '/';
+  };
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        const next = getNextDestination();
+        if (router && typeof router.replace === 'function') {
+          router.replace(next);
+        }
+      }
+    });
+  }, [router]);
 
   async function handleGoogleLogin() {
     setLoading(true);
+    const destination = getNextDestination();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: `${window.location.origin}${destination}`,
         scopes: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/drive.file'
       }
     });

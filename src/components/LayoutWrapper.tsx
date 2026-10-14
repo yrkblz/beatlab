@@ -42,17 +42,28 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
     };
   }, []);
 
-  const normalizedPath = (pathname || '').toLowerCase().replace(/\/+$/, '') || '/';
+  const normalizedPath = (pathname || '')
+    .split('?')[0]
+    .split('#')[0]
+    .toLowerCase()
+    .trim()
+    .replace(/\/+$/, '') || '/';
   
   // For unauthenticated visitors on the root route ('/'), hide margins/padding so Landing Page spans full viewport cleanly.
   // Also support full-width presentation on standalone routes.
   const isFullWidth = (normalizedPath === '/' && !user) ||
     normalizedPath === '/login' ||
+    normalizedPath.startsWith('/login/') ||
     normalizedPath === '/terms' ||
+    normalizedPath.startsWith('/terms/') ||
     normalizedPath === '/privacy' ||
+    normalizedPath.startsWith('/privacy/') ||
     normalizedPath === '/cookies' ||
+    normalizedPath.startsWith('/cookies/') ||
     normalizedPath === '/upgrade' ||
-    normalizedPath.startsWith('/checkout');
+    normalizedPath.startsWith('/upgrade/') ||
+    normalizedPath === '/checkout' ||
+    normalizedPath.startsWith('/checkout/');
 
   return (
     <main

@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { useRouter, usePathname } from 'next/navigation';
-import { calculateSubscriptionStatus, type SubscriptionStatus } from '@/lib/subscription';
+import { calculateSubscriptionStatus, isProfileComplete, normalizeRoutePath, type SubscriptionStatus } from '@/lib/subscription';
 
 export default function Sidebar() {
   const [user, setUser] = useState<User | null>(null);
@@ -50,7 +50,9 @@ export default function Sidebar() {
         if (event === 'SIGNED_OUT') {
           router.push('/');
         } else if (currentUser) {
-          // On auth change (like sign in), check profile
+          // On auth change (like sign in), re-verify profile
+          lastValidatedUserIdRef.current = null;
+          setIsProfileValid(false);
           checkProfile(currentUser.id);
         } else {
           lastValidatedUserIdRef.current = null;
@@ -66,6 +68,24 @@ export default function Sidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount to setup auth
 
+  // Listen to profile updates (e.g. saved from /account)
+  useEffect(() => {
+    const handleProfileUpdated = () => {
+      lastValidatedUserIdRef.current = null;
+      setIsProfileValid(false);
+      if (user && isMountedRef.current) {
+        checkProfile(user.id);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beatlab:profile-updated', handleProfileUpdated);
+      return () => {
+        window.removeEventListener('beatlab:profile-updated', handleProfileUpdated);
+      };
+    }
+  }, [user]);
+
   // Listen to pathname changes for forced onboarding checks during client navigation
   useEffect(() => {
     if (user && isMountedRef.current) {
@@ -78,18 +98,26 @@ export default function Sidebar() {
     // If we already confirmed this user has a valid profile, no need to check again
     if ((isProfileValid && lastValidatedUserIdRef.current === userId) || isCheckingRef.current) return;
 
-    const normalizedPath = (pathname || '').toLowerCase().replace(/\/+$/, '') || '/';
+    const normalizedPath = normalizeRoutePath(pathname);
 
     // Skip redirect logic if already on login, account, settings, upgrade, checkout or legal pages
     if (
       normalizedPath === '/login' ||
+      normalizedPath.startsWith('/login/') ||
       normalizedPath === '/account' ||
+      normalizedPath.startsWith('/account/') ||
       normalizedPath === '/settings' ||
+      normalizedPath.startsWith('/settings/') ||
       normalizedPath === '/terms' ||
+      normalizedPath.startsWith('/terms/') ||
       normalizedPath === '/privacy' ||
+      normalizedPath.startsWith('/privacy/') ||
       normalizedPath === '/cookies' ||
+      normalizedPath.startsWith('/cookies/') ||
       normalizedPath === '/upgrade' ||
-      normalizedPath.startsWith('/checkout')
+      normalizedPath.startsWith('/upgrade/') ||
+      normalizedPath === '/checkout' ||
+      normalizedPath.startsWith('/checkout/')
     )
       return;
 
@@ -97,43 +125,52 @@ export default function Sidebar() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('full_name, stage_name, address, base_currency, is_lifetime_paid, trial_ends_at')
+        .select('full_name, stage_name, address, base_currency, is_lifetime_paid, trial_ends_at, created_at')
         .eq('id', userId)
         .single();
 
       if (!isMountedRef.current) return;
 
-      if (data) {
-        setSubStatus(calculateSubscriptionStatus(data, user?.created_at));
-      } else {
-        setSubStatus(calculateSubscriptionStatus(null, user?.created_at));
+      const sub = calculateSubscriptionStatus(data, user?.created_at);
+      setSubStatus(sub);
+
+      // Expired trial users are hard-blocked by PaywallBlocker directly on studio routes (do not redirect away to /account)
+      if (sub.isTrialExpired && !sub.isLifetime) {
+        return;
       }
 
-      if (error || !data || !data.full_name || !data.stage_name || !data.address || !data.base_currency) {
+      if (error || !isProfileComplete(data)) {
         router.push('/account');
       } else {
         lastValidatedUserIdRef.current = userId;
         setIsProfileValid(true);
       }
     } catch (err) {
-      if (isMountedRef.current) {
-        console.error('Error checking profile:', err);
-      }
+      if (!isMountedRef.current) return;
+      console.error('Error checking profile:', err);
     } finally {
-      isCheckingRef.current = false;
+      if (isMountedRef.current) {
+        isCheckingRef.current = false;
+      }
     }
   };
 
-  const normalizedPath = (pathname || '').toLowerCase().replace(/\/+$/, '') || '/';
+  const normalizedPath = normalizeRoutePath(pathname);
 
   // Standalone pages that provide their own full-page layout without sidebar
   if (
     normalizedPath === '/login' ||
+    normalizedPath.startsWith('/login/') ||
     normalizedPath === '/terms' ||
+    normalizedPath.startsWith('/terms/') ||
     normalizedPath === '/privacy' ||
+    normalizedPath.startsWith('/privacy/') ||
     normalizedPath === '/cookies' ||
+    normalizedPath.startsWith('/cookies/') ||
     normalizedPath === '/upgrade' ||
-    normalizedPath.startsWith('/checkout')
+    normalizedPath.startsWith('/upgrade/') ||
+    normalizedPath === '/checkout' ||
+    normalizedPath.startsWith('/checkout/')
   ) {
     return null;
   }

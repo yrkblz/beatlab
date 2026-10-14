@@ -4,6 +4,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import CookieBanner from "@/components/CookieBanner";
 import LayoutWrapper from "@/components/LayoutWrapper";
+import StudioGuard from "@/components/StudioGuard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,7 +32,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white text-black flex h-screen overflow-hidden`}
       >
         <Sidebar />
-        <LayoutWrapper>{children}</LayoutWrapper>
+        <LayoutWrapper>
+          <StudioGuard>{children}</StudioGuard>
+        </LayoutWrapper>
         <CookieBanner />
       </body>
     </html>
