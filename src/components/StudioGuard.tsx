@@ -41,6 +41,7 @@ export default function StudioGuard({
   const [, setTick] = useState(0);
 
   const isMountedRef = useRef(true);
+  const prevUserIdRef = useRef<string | null>(initialUser?.id ?? null);
 
   const normalizedPath = normalizeRoutePath(pathname);
   const isStudio = isStudioRoute(normalizedPath);
@@ -115,6 +116,10 @@ export default function StudioGuard({
           setProfile(null);
           setIsProfileLoaded(false);
           setIsLoadingProfile(false);
+        } else if (currentUser.id !== prevUserIdRef.current) {
+          setProfile(null);
+          setIsProfileLoaded(false);
+          setIsLoadingProfile(true);
         }
       }
     );
@@ -129,6 +134,7 @@ export default function StudioGuard({
     if (isLoadingAuth) return;
 
     if (!user) {
+      prevUserIdRef.current = null;
       setProfile(null);
       setIsProfileLoaded(false);
       setIsLoadingProfile(false);
@@ -142,10 +148,16 @@ export default function StudioGuard({
       return;
     }
 
+    // If it's the exact same user and profile is already loaded, do not unmount studio tools
+    if (prevUserIdRef.current === user.id && isProfileLoaded) {
+      return;
+    }
+
+    prevUserIdRef.current = user.id;
     setIsProfileLoaded(false);
     setIsLoadingProfile(true);
     fetchProfile(user.id);
-  }, [user, isLoadingAuth, initialProfile, fetchProfile]);
+  }, [user, isLoadingAuth, initialProfile, fetchProfile, isProfileLoaded]);
 
   // 3. Listen to profile updates (e.g. saved from /account or checkout)
   useEffect(() => {

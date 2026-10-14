@@ -13,6 +13,8 @@ import {
   Lock,
   ArrowRight,
   ShieldCheck,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { calculateSubscriptionStatus } from '@/lib/subscription';
@@ -25,6 +27,7 @@ export default function DownloaderPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ title: string; link: string } | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const [user, setUser] = useState<User | null>(null);
   const [isLifetime, setIsLifetime] = useState(false);
@@ -328,17 +331,43 @@ export default function DownloaderPage() {
             <h4 className="text-xl font-bold text-gray-900 mb-6 max-w-xl truncate">
               {result.title}
             </h4>
-            <a
-              href={result.link}
-              target="_blank"
-              rel="noreferrer"
-              className="bg-black text-white px-8 py-3.5 rounded-xl font-semibold hover:bg-gray-800 transition-colors flex items-center justify-center shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform duration-200"
-            >
-              <Download size={20} className="mr-2" />
-              Download MP3 Now
-            </a>
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <a
+                href={result.link}
+                target="_blank"
+                rel="noreferrer"
+                download={`${result.title || 'audio'}.mp3`}
+                className="bg-black hover:bg-neutral-800 text-white px-8 py-3.5 rounded-xl font-semibold transition-all flex items-center justify-center shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform duration-200 text-sm cursor-pointer"
+              >
+                <Download size={18} className="mr-2" />
+                Download MP3 Now
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  if (result?.link) {
+                    navigator.clipboard.writeText(result.link);
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 2500);
+                  }
+                }}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-5 py-3.5 rounded-xl font-medium transition-colors flex items-center justify-center text-sm cursor-pointer"
+              >
+                {copiedLink ? (
+                  <>
+                    <Check size={16} className="mr-2 text-emerald-600" />
+                    <span>Link Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={16} className="mr-2 text-gray-500" />
+                    <span>Copy Direct Link</span>
+                  </>
+                )}
+              </button>
+            </div>
             <p className="text-xs text-gray-400 mt-4">
-              Link expires in a few hours.
+              Direct high-quality audio stream generated via RapidAPI. Link expires in a few hours.
             </p>
           </div>
         </div>
