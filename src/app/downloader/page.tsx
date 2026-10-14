@@ -37,6 +37,17 @@ export default function DownloaderPage() {
   useEffect(() => {
     let isMounted = true;
 
+    // Restore any active conversion result from sessionStorage
+    try {
+      const saved = sessionStorage.getItem('beatlab_mp3_last_result');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.link && parsed?.title) {
+          setResult(parsed);
+        }
+      }
+    } catch {}
+
     async function checkSubscriptionAndLimits() {
       try {
         const {
@@ -129,7 +140,11 @@ export default function DownloaderPage() {
         throw new Error(data.error || 'Failed to download');
       }
 
-      setResult({ title: data.title, link: data.link });
+      const newResult = { title: data.title, link: data.link };
+      setResult(newResult);
+      try {
+        sessionStorage.setItem('beatlab_mp3_last_result', JSON.stringify(newResult));
+      } catch {}
 
       // Track and increment download count if in trial
       if (isTrial) {
@@ -139,11 +154,6 @@ export default function DownloaderPage() {
         if (user) {
           const storageKey = `beatlab_mp3_downloads_${user.id}`;
           localStorage.setItem(storageKey, nextCount.toString());
-          supabase.auth
-            .updateUser({
-              data: { mp3_downloads_count: nextCount },
-            })
-            .catch(() => {});
         } else {
           localStorage.setItem(
             'beatlab_mp3_downloads_guest',
@@ -318,20 +328,46 @@ export default function DownloaderPage() {
       {/* Result Display */}
       {result && (
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-          <div className="p-6 bg-gray-50 border-b border-gray-200">
+          <div className="p-6 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-semibold text-gray-900 flex items-center">
               <CheckCircle size={18} className="mr-2 text-green-500" />
-              Conversion Successful
+              Conversion Ready
             </h3>
+            <button
+              type="button"
+              onClick={() => {
+                setResult(null);
+                setUrl('');
+                try {
+                  sessionStorage.removeItem('beatlab_mp3_last_result');
+                } catch {}
+              }}
+              className="text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors"
+            >
+              Convert Another Video &rarr;
+            </button>
           </div>
           <div className="p-8 text-center flex flex-col items-center justify-center">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
               <Video size={32} className="text-red-600" />
             </div>
-            <h4 className="text-xl font-bold text-gray-900 mb-6 max-w-xl truncate">
+            <h4 className="text-xl font-bold text-gray-900 mb-2 max-w-xl truncate">
               {result.title}
             </h4>
-            <div className="flex flex-col sm:flex-row items-center gap-3">
+
+            {/* Native Audio Preview */}
+            <div className="w-full max-w-lg my-4">
+              <audio
+                controls
+                src={result.link}
+                preload="metadata"
+                className="w-full rounded-xl"
+              >
+                Your browser does not support the audio element.
+              </audio>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 mt-2">
               <a
                 href={result.link}
                 target="_blank"

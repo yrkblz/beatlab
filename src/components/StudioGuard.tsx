@@ -96,12 +96,14 @@ export default function StudioGuard({
       .then(({ data }) => {
         if (!isMountedRef.current) return;
         const currentUser = data?.user ?? null;
+        prevUserIdRef.current = currentUser?.id ?? null;
         setUser(currentUser);
         setIsLoadingAuth(false);
       })
       .catch((err) => {
         if (!isMountedRef.current) return;
         console.error('Error in StudioGuard auth check:', err);
+        prevUserIdRef.current = null;
         setUser(null);
         setIsLoadingAuth(false);
       });
@@ -110,16 +112,21 @@ export default function StudioGuard({
       (_event, session) => {
         if (!isMountedRef.current) return;
         const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        setIsLoadingAuth(false);
-        if (!currentUser) {
-          setProfile(null);
-          setIsProfileLoaded(false);
-          setIsLoadingProfile(false);
-        } else if (currentUser.id !== prevUserIdRef.current) {
-          setProfile(null);
-          setIsProfileLoaded(false);
-          setIsLoadingProfile(true);
+        // Only trigger auth reload if user ID actually changed (e.g. sign in or sign out)
+        if (currentUser?.id !== prevUserIdRef.current) {
+          prevUserIdRef.current = currentUser?.id ?? null;
+          setUser(currentUser);
+          setIsLoadingAuth(false);
+          if (!currentUser) {
+            setProfile(null);
+            setIsProfileLoaded(false);
+            setIsLoadingProfile(false);
+          } else {
+            setProfile(null);
+            setIsProfileLoaded(false);
+            setIsLoadingProfile(true);
+            fetchProfile(currentUser.id);
+          }
         }
       }
     );
