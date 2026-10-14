@@ -250,10 +250,22 @@ export default function MailerPage() {
       return;
     }
 
+    // Obtain fresh access_token for Supabase RLS authentication
+    let userToken = session?.access_token;
+    try {
+      const { data: refreshData } = await supabase.auth.getSession();
+      if (refreshData?.session?.access_token) {
+        userToken = refreshData.session.access_token;
+      }
+    } catch {}
+
     try {
       const res = await fetch('/api/send-mail', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
+        },
         body: JSON.stringify({ 
           emails: emailList, 
           campaignName,
@@ -261,6 +273,7 @@ export default function MailerPage() {
           message,
           attachments: selectedAttachments,
           accessToken: session.provider_token,
+          userToken,
           senderEmail: session.user.email,
           userId: session.user.id
         })

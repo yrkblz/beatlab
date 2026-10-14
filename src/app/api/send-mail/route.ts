@@ -15,7 +15,7 @@ function createMimeMessage(to: string, subject: string, html: string) {
 
 export async function POST(request: Request) {
   try {
-    const { emails, subject, message, accessToken, senderEmail, campaignName, attachments, userId } = await request.json();
+    const { emails, subject, message, accessToken, senderEmail, campaignName, attachments, userId, userToken } = await request.json();
     const host = request.headers.get('host') || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const origin = `${protocol}://${host}`;
@@ -25,7 +25,13 @@ export async function POST(request: Request) {
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    // Use service role key if available, otherwise authenticated user JWT, fallback to anon key
+    const authHeaderFromReq = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    const userAuthToken = userToken || authHeaderFromReq;
+    const authBearer = supabaseServiceKey || userAuthToken || supabaseAnonKey;
 
     // 1. Save Campaign in Supabase (scoped to userId for user isolation)
     const campaignBody: Record<string, any> = {
@@ -39,8 +45,8 @@ export async function POST(request: Request) {
     let campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
       method: 'POST',
       headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${authBearer}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=representation'
       },
@@ -53,8 +59,8 @@ export async function POST(request: Request) {
       campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
         method: 'POST',
         headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${authBearer}`,
           'Content-Type': 'application/json',
           'Prefer': 'return=representation'
         },
@@ -104,8 +110,8 @@ export async function POST(request: Request) {
       const logRes = await fetch(`${supabaseUrl}/rest/v1/email_logs`, {
         method: 'POST',
         headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${authBearer}`,
           'Content-Type': 'application/json',
           'Prefer': 'return=representation'
         },
