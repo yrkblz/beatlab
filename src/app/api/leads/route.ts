@@ -28,50 +28,81 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing query tag.' }, { status: 400 });
     }
 
+    const requestedCount = Math.min(Math.max(1, Number(maxResults) || 50), 100);
+    const firstPageLimit = Math.min(requestedCount, 50);
+
     // 1. Search videos by given tag
     const searchRes = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?part=id,snippet&q=${encodeURIComponent(query)}&type=video&maxResults=${maxResults}&order=date&key=${apiKey}`
+      `https://www.googleapis.com/youtube/v3/search?part=id,snippet&q=${encodeURIComponent(query)}&type=video&maxResults=${firstPageLimit}&order=date&key=${apiKey}`
     );
     
     if (!searchRes.ok) {
-      const err = await searchRes.json();
+      const err = await searchRes.json().catch(() => ({}));
       throw new Error(err.error?.message || 'YouTube search error');
     }
     
     const searchData = await searchRes.json();
-    const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
+    let videoIdList: string[] = (searchData.items || [])
+      .map((item: any) => item.id?.videoId)
+      .filter(Boolean);
 
-    if (!videoIds) {
+    // If requested more than 50 and there is a nextPageToken, fetch second page
+    if (requestedCount > 50 && searchData.nextPageToken) {
+      const secondPageLimit = requestedCount - 50;
+      const searchRes2 = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=id,snippet&q=${encodeURIComponent(query)}&type=video&maxResults=${secondPageLimit}&pageToken=${searchData.nextPageToken}&order=date&key=${apiKey}`
+      );
+      if (searchRes2.ok) {
+        const data2 = await searchRes2.json();
+        const moreIds = (data2.items || [])
+          .map((item: any) => item.id?.videoId)
+          .filter(Boolean);
+        videoIdList = [...videoIdList, ...moreIds];
+      }
+    }
+
+    if (videoIdList.length === 0) {
       return NextResponse.json({ leads: [] });
     }
 
-    // 2. Fetch complete descriptions for these videos
-    const videosRes = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoIds}&key=${apiKey}`
-    );
-    const videosData = await videosRes.json();
-
+    // 2. Fetch complete descriptions for these videos in chunks of 50
     const leads: any[] = [];
+    const chunkSize = 50;
 
-    // 3. Analyze descriptions for Instagram links
-    videosData.items.forEach((video: any) => {
-      const channelName = video.snippet.channelTitle;
-      const description = video.snippet.description;
-      const videoTitle = video.snippet.title;
-      const videoUrl = `https://www.youtube.com/watch?v=${video.id}`;
-      
-      const instagram = extractInstagram(description);
+    for (let i = 0; i < videoIdList.length; i += chunkSize) {
+      const chunkIds = videoIdList.slice(i, i + chunkSize).join(',');
+      const videosRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${chunkIds}&key=${apiKey}`
+      );
+      if (!videosRes.ok) continue;
+      const videosData = await videosRes.json();
 
-      // Add only if Instagram was found and channel is not already present in list
-      if (instagram && !leads.some(l => l.channelName === channelName)) {
-        leads.push({
-          channelName,
-          instagram,
-          videoTitle,
-          videoUrl
-        });
-      }
-    });
+      (videosData.items || []).forEach((video: any) => {
+        const channelName = video.snippet?.channelTitle || 'Unknown Artist';
+        const description = video.snippet?.description || '';
+        const videoTitle = video.snippet?.title || 'YouTube Video';
+        const videoUrl = `https://www.youtube.com/watch?v=${video.id}`;
+        
+        const instagram = extractInstagram(description);
+
+        // Add only if Instagram was found and channel/handle is not already present in list
+        if (
+          instagram &&
+          !leads.some(
+            (l) =>
+              l.channelName.toLowerCase() === channelName.toLowerCase() ||
+              l.instagram.toLowerCase() === instagram.toLowerCase()
+          )
+        ) {
+          leads.push({
+            channelName,
+            instagram,
+            videoTitle,
+            videoUrl,
+          });
+        }
+      });
+    }
 
     return NextResponse.json({ leads });
   } catch (error: any) {
