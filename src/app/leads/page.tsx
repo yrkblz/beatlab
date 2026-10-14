@@ -5,6 +5,7 @@ import {
   Search,
   PlaySquare,
   AtSign,
+  Mail,
   Loader2,
   Copy,
   ExternalLink,
@@ -18,11 +19,15 @@ import {
   Filter,
   HelpCircle,
   ArrowDownCircle,
+  UserCheck,
 } from 'lucide-react';
 
 export interface LeadItem {
   channelName: string;
+  channelId?: string;
+  channelCustomUrl?: string;
   instagram: string;
+  email?: string;
   videoTitle: string;
   videoUrl: string;
   isPastDuplicate?: boolean;
@@ -31,6 +36,7 @@ export interface LeadItem {
 export interface SavedLead {
   instagram: string;
   channelName: string;
+  email?: string;
   savedAt: string;
 }
 
@@ -127,12 +133,17 @@ export default function LeadsPage() {
       // Check against existing history prior to this search
       const existingIg = new Set(history.map((h) => (h.instagram || '').toLowerCase().trim()));
       const existingChannels = new Set(history.map((h) => (h.channelName || '').toLowerCase().trim()));
+      const existingEmails = new Set(
+        history.map((h) => (h.email || '').toLowerCase().trim()).filter(Boolean)
+      );
 
       const taggedLeads: LeadItem[] = incomingLeads.map((item) => ({
         ...item,
-        isPastDuplicate:
-          existingIg.has(item.instagram.toLowerCase().trim()) ||
-          existingChannels.has(item.channelName.toLowerCase().trim()),
+        isPastDuplicate: Boolean(
+          (item.instagram && existingIg.has(item.instagram.toLowerCase().trim())) ||
+          (item.channelName && existingChannels.has(item.channelName.toLowerCase().trim())) ||
+          (item.email && existingEmails.has(item.email.toLowerCase().trim()))
+        ),
       }));
 
       setRawResults(taggedLeads);
@@ -143,6 +154,7 @@ export default function LeadsPage() {
         const newRecords: SavedLead[] = trulyNew.map((item) => ({
           instagram: item.instagram,
           channelName: item.channelName,
+          email: item.email || '',
           savedAt: new Date().toISOString(),
         }));
         const updatedHistory = [...history, ...newRecords];
@@ -193,26 +205,33 @@ export default function LeadsPage() {
       setNextPageToken(data.nextPageToken || null);
 
       if (newIncoming.length === 0) {
-        alert('No additional Instagram handles found in the next batch of videos.');
+        alert('No additional leads found in the next batch of videos.');
         setLoadingMore(false);
         return;
       }
 
       const existingIg = new Set(history.map((h) => (h.instagram || '').toLowerCase().trim()));
       const existingChannels = new Set(history.map((h) => (h.channelName || '').toLowerCase().trim()));
+      const existingEmails = new Set(
+        history.map((h) => (h.email || '').toLowerCase().trim()).filter(Boolean)
+      );
 
       const newlyTagged: LeadItem[] = newIncoming.map((item) => ({
         ...item,
-        isPastDuplicate:
-          existingIg.has(item.instagram.toLowerCase().trim()) ||
-          existingChannels.has(item.channelName.toLowerCase().trim()),
+        isPastDuplicate: Boolean(
+          (item.instagram && existingIg.has(item.instagram.toLowerCase().trim())) ||
+          (item.channelName && existingChannels.has(item.channelName.toLowerCase().trim())) ||
+          (item.email && existingEmails.has(item.email.toLowerCase().trim()))
+        ),
       }));
 
       // Append to current raw results without duplicating items
       setRawResults((prev) => {
-        const existingKeys = new Set(prev.map((p) => p.instagram.toLowerCase().trim()));
+        const existingKeys = new Set(
+          prev.map((p) => (p.instagram || p.email || p.channelName).toLowerCase().trim())
+        );
         const uniqueToAdd = newlyTagged.filter(
-          (n) => !existingKeys.has(n.instagram.toLowerCase().trim())
+          (n) => !existingKeys.has((n.instagram || n.email || n.channelName).toLowerCase().trim())
         );
         return [...prev, ...uniqueToAdd];
       });
@@ -223,6 +242,7 @@ export default function LeadsPage() {
         const newRecords: SavedLead[] = trulyNew.map((item) => ({
           instagram: item.instagram,
           channelName: item.channelName,
+          email: item.email || '',
           savedAt: new Date().toISOString(),
         }));
         const updatedHistory = [...history, ...newRecords];
@@ -239,22 +259,39 @@ export default function LeadsPage() {
   }
 
   function copyInstagrams() {
-    const list = leads.map((l) => l.instagram).join('\n');
+    const list = leads
+      .map((l) => l.instagram)
+      .filter(Boolean)
+      .join('\n');
     navigator.clipboard.writeText(list);
     setCopiedType('ig');
     setTimeout(() => setCopiedType(null), 2500);
     alert('Instagram handles copied to clipboard!');
   }
 
+  function copyEmails() {
+    const emails = leads
+      .map((l) => l.email)
+      .filter(Boolean)
+      .join('\n');
+    if (!emails) {
+      alert('No email addresses found in the current leads list.');
+      return;
+    }
+    navigator.clipboard.writeText(emails);
+    setCopiedType('emails');
+    setTimeout(() => setCopiedType(null), 2500);
+    alert('Email addresses copied to clipboard!');
+  }
+
   function copyAllAsCsv() {
-    const header = 'YouTube Channel,Instagram,Video Title,Video URL\n';
+    const header = 'YouTube Channel,Instagram,Email,Video Title,Video URL\n';
     const rows = leads
       .map(
         (l) =>
-          `"${l.channelName.replace(/"/g, '""')}","@${l.instagram}","${l.videoTitle.replace(
-            /"/g,
-            '""'
-          )}","${l.videoUrl}"`
+          `"${l.channelName.replace(/"/g, '""')}","${l.instagram ? `@${l.instagram}` : ''}","${
+            l.email || ''
+          }","${l.videoTitle.replace(/"/g, '""')}","${l.videoUrl}"`
       )
       .join('\n');
     navigator.clipboard.writeText(header + rows);
@@ -280,7 +317,7 @@ export default function LeadsPage() {
           Lead Finder (YouTube)
         </h2>
         <p className="text-gray-500 mt-2">
-          Enter a tag (e.g. &quot;drake type beat&quot;) to scrape Instagram handles from latest video descriptions.
+          Enter a tag (e.g. &quot;drake type beat&quot;) to scrape Instagram handles &amp; inquiry emails from video descriptions and Channel About profiles.
         </p>
       </div>
 
@@ -383,11 +420,11 @@ export default function LeadsPage() {
           </div>
         </form>
 
-        {/* Informative Tip on Video Ratio */}
+        {/* Informative Tip on Channel & Video Extraction */}
         <div className="mt-4 pt-3 border-t border-gray-100 flex items-start gap-2 text-xs text-gray-500 leading-relaxed">
           <HelpCircle size={15} className="text-gray-400 shrink-0 mt-0.5" />
           <span>
-            <strong>How it works:</strong> Across YouTube beat uploads, roughly <strong>30–35%</strong> of descriptions include an Instagram handle (e.g. scanning 100 videos finds ~33 contacts). When <em>&ldquo;Only unique leads&rdquo;</em> is active, the scanner automatically pages deeper into YouTube to fetch <strong>different/older videos</strong> until it finds fresh artists.
+            <strong>Channel &amp; Video Inspection:</strong> The scraper now analyzes both the <strong>Video Description</strong> and the producer&apos;s <strong>Channel &quot;About&quot; Profile</strong> (e.g. &quot;WSPÓŁPRACA: email@...&quot; and Instagram handles). When <em>&ldquo;Only unique leads&rdquo;</em> is active, it automatically pages deeper into YouTube to fetch fresh, un-contacted artists.
           </span>
         </div>
 
@@ -419,11 +456,11 @@ export default function LeadsPage() {
               )}
             </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
               <button
                 type="button"
                 onClick={copyInstagrams}
-                className="flex items-center text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-300 px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors shadow-xs cursor-pointer"
+                className="flex items-center text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-300 px-3.5 py-2 rounded-xl hover:bg-gray-50 transition-colors shadow-xs cursor-pointer"
               >
                 {copiedType === 'ig' ? (
                   <>
@@ -440,9 +477,28 @@ export default function LeadsPage() {
 
               <button
                 type="button"
+                onClick={copyEmails}
+                className="flex items-center text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-300 px-3.5 py-2 rounded-xl hover:bg-gray-50 transition-colors shadow-xs cursor-pointer"
+                title="Copy all discovered collaboration email addresses"
+              >
+                {copiedType === 'emails' ? (
+                  <>
+                    <Check size={15} className="mr-1.5 text-emerald-600" />
+                    <span>Emails Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail size={15} className="mr-1.5 text-emerald-600" />
+                    <span>Copy Emails</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
                 onClick={copyAllAsCsv}
-                className="flex items-center text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-300 px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors shadow-xs cursor-pointer"
-                title="Copy all details (Channel, IG, Video) formatted as CSV"
+                className="flex items-center text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-300 px-3.5 py-2 rounded-xl hover:bg-gray-50 transition-colors shadow-xs cursor-pointer"
+                title="Copy all details (Channel, IG, Email, Video) formatted as CSV"
               >
                 {copiedType === 'csv' ? (
                   <>
@@ -471,6 +527,9 @@ export default function LeadsPage() {
                     Instagram (from desc)
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    Email (Channel / Video)
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
                     Source Video
                   </th>
                 </tr>
@@ -481,18 +540,50 @@ export default function LeadsPage() {
                     <td className="px-6 py-5 whitespace-nowrap">
                       <div className="flex items-center">
                         <PlaySquare size={18} className="text-red-500 mr-3 shrink-0" />
-                        <span className="font-semibold text-gray-900">{lead.channelName}</span>
+                        <div>
+                          {lead.channelCustomUrl ? (
+                            <a
+                              href={`https://youtube.com/${lead.channelCustomUrl}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-semibold text-gray-900 hover:text-black hover:underline flex items-center gap-1"
+                            >
+                              <span>{lead.channelName}</span>
+                              <ExternalLink size={12} className="opacity-40" />
+                            </a>
+                          ) : (
+                            <span className="font-semibold text-gray-900">{lead.channelName}</span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-5 whitespace-nowrap">
-                      <a
-                        href={`https://instagram.com/${lead.instagram}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors"
-                      >
-                        <AtSign size={16} className="mr-1.5 opacity-70 shrink-0" /> {lead.instagram}
-                      </a>
+                      {lead.instagram ? (
+                        <a
+                          href={`https://instagram.com/${lead.instagram}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                        >
+                          <AtSign size={16} className="mr-1.5 opacity-70 shrink-0" /> {lead.instagram}
+                        </a>
+                      ) : (
+                        <span className="text-gray-400 text-xs italic">Not in bio</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-5 whitespace-nowrap">
+                      {lead.email ? (
+                        <a
+                          href={`mailto:${lead.email}`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 transition-colors"
+                          title="Click to compose email"
+                        >
+                          <Mail size={13} className="text-emerald-600 shrink-0" />
+                          <span>{lead.email}</span>
+                        </a>
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-5 whitespace-nowrap text-sm">
                       <a

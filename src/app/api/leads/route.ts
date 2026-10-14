@@ -1,17 +1,34 @@
 import { NextResponse } from 'next/server';
 
-// Function extracting Instagram handle or link from video description
+// Function extracting Instagram handle or link from text
 function extractInstagram(description: string): string | null {
   if (!description) return null;
-  
+
   // Search for instagram.com/username links
   const linkMatch = description.match(/instagram\.com\/([a-zA-Z0-9_.-]+)/i);
-  if (linkMatch) return linkMatch[1];
+  if (linkMatch && !['p', 'reel', 'stories', 'explore', 'channel'].includes(linkMatch[1].toLowerCase())) {
+    return linkMatch[1];
+  }
 
-  // Search for patterns like "IG: name", "Insta: @name", "ig - @name"
-  const textMatch = description.match(/(?:ig|insta|instagram)[\s]*[:-]*[\s]*@?([a-zA-Z0-9_.-]+)/i);
+  // Search for patterns like "IG: name", "Insta: @name", "ig - @name", "@name on ig"
+  const textMatch = description.match(/(?:ig|insta|instagram)[\s]*[:-]*[\s]*@?([a-zA-Z0-9_.-]{3,30})/i);
   if (textMatch && textMatch[1].length > 2) return textMatch[1];
 
+  return null;
+}
+
+// Function extracting business / inquiry email from text (e.g. "WSPÓŁPRACA: nahapsa@igie.gg")
+function extractEmail(description: string): string | null {
+  if (!description) return null;
+  const match = description.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i);
+  if (match) {
+    const email = match[0].trim();
+    const lower = email.toLowerCase();
+    // Exclude file extensions or common library placeholders
+    if (!lower.endsWith('.png') && !lower.endsWith('.jpg') && !lower.endsWith('.gif') && !lower.endsWith('.webp')) {
+      return email;
+    }
+  }
   return null;
 }
 
@@ -93,21 +110,66 @@ export async function POST(request: Request) {
         if (!videosRes.ok) continue;
         const videosData = await videosRes.json();
 
+        // Collect unique channel IDs to inspect their Channel "About" descriptions
+        const channelIds = Array.from(
+          new Set(
+            (videosData.items || [])
+              .map((v: any) => v.snippet?.channelId)
+              .filter(Boolean)
+          )
+        );
+
+        const channelMap: Record<string, { description: string; customUrl: string }> = {};
+        if (channelIds.length > 0) {
+          try {
+            const channelsRes = await fetch(
+              `https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelIds.join(',')}&key=${apiKey}`
+            );
+            if (channelsRes.ok) {
+              const channelsData = await channelsRes.json();
+              (channelsData.items || []).forEach((c: any) => {
+                if (c.id) {
+                  channelMap[c.id] = {
+                    description: c.snippet?.description || '',
+                    customUrl: c.snippet?.customUrl || '',
+                  };
+                }
+              });
+            }
+          } catch {
+            // Graceful non-fatal fallback
+          }
+        }
+
         (videosData.items || []).forEach((video: any) => {
           const channelName = video.snippet?.channelTitle || 'Unknown Artist';
-          const description = video.snippet?.description || '';
+          const channelId = video.snippet?.channelId;
+          const channelInfo = channelId ? channelMap[channelId] : null;
+
+          const videoDesc = video.snippet?.description || '';
+          const channelDesc = channelInfo?.description || '';
           const videoTitle = video.snippet?.title || 'YouTube Video';
           const videoUrl = `https://www.youtube.com/watch?v=${video.id}`;
 
-          const instagram = extractInstagram(description);
+          // Check video description first, fallback to Channel "About" description
+          const instagram = extractInstagram(videoDesc) || extractInstagram(channelDesc);
 
-          if (!instagram) return;
+          // Check Channel "About" description for email (e.g. WSPÓŁPRACA: nahapsa@igie.gg), then video description
+          const email = extractEmail(channelDesc) || extractEmail(videoDesc);
 
-          const igLower = instagram.toLowerCase().trim();
+          // Only keep lead if we found an Instagram OR an Email
+          if (!instagram && !email) return;
+
+          const igLower = (instagram || '').toLowerCase().trim();
           const chLower = channelName.toLowerCase().trim();
+          const emailLower = (email || '').toLowerCase().trim();
 
           // Skip if in exclude list (already seen in past searches)
-          if (excludeIgSet.has(igLower) || excludeChSet.has(chLower)) {
+          if (
+            (igLower && excludeIgSet.has(igLower)) ||
+            (chLower && excludeChSet.has(chLower)) ||
+            (emailLower && excludeIgSet.has(emailLower))
+          ) {
             return;
           }
 
@@ -115,8 +177,9 @@ export async function POST(request: Request) {
           if (
             leads.some(
               (l) =>
-                l.channelName.toLowerCase() === chLower ||
-                l.instagram.toLowerCase() === igLower
+                (chLower && l.channelName.toLowerCase() === chLower) ||
+                (igLower && l.instagram && l.instagram.toLowerCase() === igLower) ||
+                (emailLower && l.email && l.email.toLowerCase() === emailLower)
             )
           ) {
             return;
@@ -124,7 +187,10 @@ export async function POST(request: Request) {
 
           leads.push({
             channelName,
-            instagram,
+            channelId,
+            channelCustomUrl: channelInfo?.customUrl || '',
+            instagram: instagram || '',
+            email: email || '',
             videoTitle,
             videoUrl,
           });

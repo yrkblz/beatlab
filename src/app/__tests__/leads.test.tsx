@@ -302,7 +302,7 @@ describe('LeadsPage (/leads)', () => {
     fireEvent.click(csvBtn);
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      expect.stringContaining('YouTube Channel,Instagram,Video Title,Video URL')
+      expect.stringContaining('YouTube Channel,Instagram,Email,Video Title,Video URL')
     );
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining('"808 Mafia Beats","@808mafiaboss"')
