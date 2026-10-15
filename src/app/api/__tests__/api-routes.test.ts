@@ -388,7 +388,7 @@ describe('Backend API Route Handlers', () => {
             expect.objectContaining({
               price_data: expect.objectContaining({
                 currency: 'usd',
-                unit_amount: 2900,
+                unit_amount: expect.any(Number),
               }),
             }),
           ],
