@@ -34,7 +34,7 @@ export async function POST(req: Request) {
           quantity: 1,
         },
       ],
-      automatic_tax: {
+      managed_payments: {
         enabled: false,
       },
       metadata: {
