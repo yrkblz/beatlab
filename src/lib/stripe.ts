@@ -11,5 +11,5 @@ export const stripe = stripeSecretKey
     })
   : null;
 
-export const LIFETIME_PRICE_USD = 1; // $1.00 USD (test price)
-export const LIFETIME_PRICE_CENTS = 100; // 100 cents = $1.00 USD
+export const LIFETIME_PRICE_USD = 29; // $29 USD one-time
+export const LIFETIME_PRICE_CENTS = 2900; // 2900 cents
