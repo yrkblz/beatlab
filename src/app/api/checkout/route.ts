@@ -21,6 +21,10 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       customer_email: userEmail || undefined,
+      allow_promotion_codes: true,
+      managed_payments: {
+        enabled: false,
+      },
       line_items: [
         {
           price_data: {
@@ -34,9 +38,6 @@ export async function POST(req: Request) {
           quantity: 1,
         },
       ],
-      managed_payments: {
-        enabled: false,
-      },
       metadata: {
         userId: userId || '',
         userEmail: userEmail || '',
