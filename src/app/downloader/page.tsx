@@ -184,35 +184,28 @@ export default function DownloaderPage() {
           </div>
 
           {/* Subscription & Download Status Badge */}
-          {!authChecking && (
+          {!authChecking && !isLifetime && (
             <div>
-              {isLifetime ? (
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200 shadow-sm">
-                  <Sparkles size={14} className="text-emerald-600" />
-                  <span>Lifetime Plan • Unlimited MP3 Downloads</span>
-                </div>
-              ) : (
-                <div
-                  className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border shadow-sm ${
-                    isLimitReached
-                      ? 'bg-red-50 text-red-800 border-red-200'
-                      : 'bg-amber-50 text-amber-900 border-amber-200'
+              <div
+                className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border shadow-sm ${
+                  isLimitReached
+                    ? 'bg-red-50 text-red-800 border-red-200'
+                    : 'bg-amber-50 text-amber-900 border-amber-200'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isLimitReached ? 'bg-red-600' : 'bg-amber-500'
                   }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      isLimitReached ? 'bg-red-600' : 'bg-amber-500'
-                    }`}
-                  ></span>
-                  <span>
-                    Trial Downloads:{' '}
-                    <strong>
-                      {downloadsCount} / {TRIAL_MAX_DOWNLOADS}
-                    </strong>{' '}
-                    used ({remainingDownloads} remaining)
-                  </span>
-                </div>
-              )}
+                ></span>
+                <span>
+                  Trial Downloads:{' '}
+                  <strong>
+                    {downloadsCount} / {TRIAL_MAX_DOWNLOADS}
+                  </strong>{' '}
+                  used ({remainingDownloads} remaining)
+                </span>
+              </div>
             </div>
           )}
         </div>

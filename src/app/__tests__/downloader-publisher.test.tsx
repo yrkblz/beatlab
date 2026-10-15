@@ -118,8 +118,9 @@ describe('Downloader Page (/downloader) Trial Limits', () => {
     });
 
     expect(
-      screen.getByText(/Lifetime Plan • Unlimited MP3 Downloads/i)
-    ).toBeInTheDocument();
+      screen.queryByText(/Lifetime Plan • Unlimited MP3 Downloads/i)
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Trial Downloads:/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Trial Limit Reached/i)).not.toBeInTheDocument();
   });
 });

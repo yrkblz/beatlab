@@ -203,7 +203,8 @@ describe('Downloader Page Extended Unit Tests', () => {
         render(<DownloaderPage />);
       });
 
-      expect(screen.getByText(/Lifetime Plan • Unlimited MP3 Downloads/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Lifetime Plan • Unlimited MP3 Downloads/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Trial Downloads:/i)).not.toBeInTheDocument();
 
       const input = screen.getByPlaceholderText(/Paste YouTube link here/i);
       fireEvent.change(input, { target: { value: 'https://www.youtube.com/watch?v=unlimited01' } });
