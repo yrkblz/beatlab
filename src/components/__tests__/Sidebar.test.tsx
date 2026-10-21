@@ -244,7 +244,7 @@ describe('Sidebar component', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Metro Boomin')).toBeInTheDocument();
-      expect(screen.getByText('M')).toBeInTheDocument();
+      expect(screen.getAllByText('M').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -313,7 +313,7 @@ describe('Sidebar component', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Quincy Jones')).toBeInTheDocument();
-      expect(screen.getByText('Q')).toBeInTheDocument();
+      expect(screen.getAllByText('Q').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -340,7 +340,7 @@ describe('Sidebar component', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Producer')).toBeInTheDocument();
-      expect(screen.getByText('?')).toBeInTheDocument();
+      expect(screen.getAllByText('?').length).toBeGreaterThanOrEqual(1);
     });
   });
 

@@ -69,7 +69,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
     <main
       data-testid="main-layout-wrapper"
       className={`flex-1 overflow-y-auto print:p-0 print:overflow-visible ${
-        isFullWidth ? 'p-0' : 'p-8'
+        isFullWidth ? 'p-0' : 'p-4 sm:p-6 md:p-8'
       }`}
     >
       {children}

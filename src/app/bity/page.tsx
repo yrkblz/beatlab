@@ -145,10 +145,10 @@ export default function BityPage() {
   const allFilters = ['All', ...GENRES];
 
   return (
-    <div className="max-w-7xl mx-auto pb-12 flex gap-8">
+    <div className="max-w-7xl mx-auto pb-12 flex flex-col lg:flex-row gap-8">
       {/* Left Panel */}
-      <div className="w-80 shrink-0">
-        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm sticky top-8">
+      <div className="w-full lg:w-80 shrink-0">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm lg:sticky lg:top-8">
           <h3 className="text-lg font-bold mb-6 flex items-center">
             <span className="text-xl mr-2 font-normal">+</span> Add new beat
           </h3>
@@ -219,7 +219,7 @@ export default function BityPage() {
 
       {/* Right Panel */}
       <div className="flex-1">
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap sm:flex-wrap gap-2 mb-6 overflow-x-auto pb-2 sm:pb-0 scrollbar-none">
           {allFilters.map(f => (
             <button
               key={f}
@@ -232,8 +232,8 @@ export default function BityPage() {
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
+          <table className="w-full divide-y divide-gray-100 block md:table">
+            <thead className="bg-gray-50 hidden md:table-header-group">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Title</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Genre</th>
@@ -243,28 +243,37 @@ export default function BityPage() {
                 <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
+            <tbody className="divide-y divide-gray-100 bg-white block md:table-row-group">
               {loading ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-500">Loading...</td></tr>
+                <tr className="block md:table-row"><td colSpan={6} className="p-8 text-center text-gray-500 block md:table-cell">Loading...</td></tr>
               ) : filteredBeats.length === 0 ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-500">No beats found.</td></tr>
+                <tr className="block md:table-row"><td colSpan={6} className="p-8 text-center text-gray-500 block md:table-cell">No beats found.</td></tr>
               ) : (
                 filteredBeats.map(beat => (
-                  <tr key={beat.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-900">{beat.title}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{beat.genre}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{beat.bpm} • {beat.key_signature || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex items-center">
-                      <Calendar size={14} className="mr-1.5" /> {new Date(beat.created_at).toLocaleDateString()}
+                  <tr key={beat.id} className="p-4 md:p-0 block md:table-row hover:bg-gray-50/70 transition-colors">
+                    <td className="block md:table-cell md:px-6 md:py-4 py-1 font-bold text-gray-900 text-base md:text-sm">{beat.title}</td>
+                    <td className="block md:table-cell md:px-6 md:py-4 py-1 text-sm text-gray-600">
+                      <span className="inline-block md:hidden text-xs text-gray-400 uppercase font-semibold mr-2">Genre:</span>
+                      <span className="px-2 py-0.5 bg-gray-100 text-gray-800 rounded text-xs font-medium md:bg-transparent md:p-0 md:text-sm">{beat.genre}</span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <a href={beat.file_url} target="_blank" rel="noreferrer" className="flex items-center text-blue-600 font-medium hover:underline">
+                    <td className="block md:table-cell md:px-6 md:py-4 py-1 text-sm text-gray-600">
+                      <span className="inline-block md:hidden text-xs text-gray-400 uppercase font-semibold mr-2">BPM / Key:</span>
+                      {beat.bpm} • {beat.key_signature || '-'}
+                    </td>
+                    <td className="block md:table-cell md:px-6 md:py-4 py-1 text-sm text-gray-500">
+                      <div className="flex items-center">
+                        <Calendar size={14} className="mr-1.5 text-gray-400 inline" /> {new Date(beat.created_at).toLocaleDateString()}
+                      </div>
+                    </td>
+                    <td className="block md:table-cell md:px-6 md:py-4 py-2 text-sm">
+                      <a href={beat.file_url} target="_blank" rel="noreferrer" className="inline-flex items-center text-blue-600 font-medium hover:underline py-1 px-2.5 md:p-0 bg-blue-50 md:bg-transparent rounded-md md:rounded-none">
                         <Download size={14} className="mr-1" /> Download
                       </a>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button onClick={() => handleDelete(beat.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors">
-                        <Trash2 size={16} />
+                    <td className="block md:table-cell md:px-6 md:py-4 py-2 text-left md:text-right pt-2 md:pt-4 border-t border-gray-100 md:border-t-0">
+                      <button onClick={() => handleDelete(beat.id)} aria-label="Delete beat" className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-md transition-colors inline-flex items-center text-xs font-semibold md:font-normal">
+                        <Trash2 size={16} className="md:mr-0 mr-1.5" />
+                        <span className="inline md:hidden">Delete Beat</span>
                       </button>
                     </td>
                   </tr>

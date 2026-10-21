@@ -431,4 +431,24 @@ describe('LicensesPage (/licenses)', () => {
     const printBtn = screen.getByRole('button', { name: /Print \/ Download PDF/i });
     expect(printBtn).toBeDisabled();
   });
+  it('toggles mobile tab between Edit Details and Document Preview', async () => {
+    await act(async () => {
+      render(<LicensesPage />);
+    });
+
+    const editTab = screen.getByRole('button', { name: /1. Edit Details/i });
+    const previewTab = screen.getByRole('button', { name: /2. Document Preview & PDF/i });
+
+    expect(editTab).toBeInTheDocument();
+    expect(previewTab).toBeInTheDocument();
+
+    // Click preview tab
+    fireEvent.click(previewTab);
+    expect(screen.getByRole('button', { name: /Back to Configuration/i })).toBeInTheDocument();
+
+    // Click back to configuration
+    const backBtn = screen.getByRole('button', { name: /Back to Configuration/i });
+    fireEvent.click(backBtn);
+    expect(screen.getByText(/License Generator Settings/i)).toBeInTheDocument();
+  });
 });

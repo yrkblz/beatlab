@@ -140,14 +140,14 @@ export default function CRMPage() {
 
   return (
     <div className="max-w-7xl mx-auto pb-12">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Placement CRM</h1>
-          <p className="text-gray-500">Track your beats sent to artists and A&Rs.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Placement CRM</h1>
+          <p className="text-xs sm:text-sm text-gray-500">Track your beats sent to artists and A&Rs.</p>
         </div>
         <button 
           onClick={() => setShowAddForm(true)}
-          className="flex items-center space-x-2 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 transition-colors"
+          className="flex items-center space-x-2 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 transition-colors w-full sm:w-auto justify-center cursor-pointer shadow-xs"
         >
           <Plus size={18} />
           <span>Add Lead</span>
@@ -197,11 +197,11 @@ export default function CRMPage() {
       {loading ? (
         <div className="text-center text-gray-500 py-12">Loading placements...</div>
       ) : (
-        <div className="flex space-x-4 overflow-x-auto pb-4">
+        <div className="flex space-x-4 overflow-x-auto pb-4 snap-x snap-mandatory scroll-smooth -mx-4 px-4 sm:mx-0 sm:px-0">
           {COLUMNS.map(col => (
             <div 
               key={col} 
-              className="flex-1 min-w-[280px] bg-gray-50 rounded-xl p-4 border border-gray-200 flex flex-col"
+              className="flex-1 min-w-[280px] max-w-[320px] sm:max-w-none snap-center bg-gray-50 rounded-xl p-4 border border-gray-200 flex flex-col shrink-0 sm:shrink"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, col)}
             >
@@ -225,13 +225,15 @@ export default function CRMPage() {
                       <div className="flex items-center space-x-2">
                         <button 
                           onClick={() => setEditingPlacement(placement)}
-                          className="text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="text-gray-400 hover:text-blue-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1 cursor-pointer"
+                          aria-label={`Edit ${placement.artist_name}`}
                         >
                           <Pencil size={14} />
                         </button>
                         <button 
                           onClick={() => handleDelete(placement.id)}
-                          className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="text-gray-400 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1 cursor-pointer"
+                          aria-label={`Delete ${placement.artist_name}`}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -243,6 +245,23 @@ export default function CRMPage() {
                         {placement.notes}
                       </p>
                     )}
+
+                    {/* Touch status switcher */}
+                    <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-medium text-gray-400">Stage:</span>
+                      <select
+                        value={placement.status}
+                        onChange={(e) => updateStatus(placement.id, e.target.value)}
+                        aria-label={`Change stage for ${placement.artist_name}`}
+                        className="text-xs font-semibold bg-gray-50 border border-gray-200 rounded-md px-2 py-1 text-gray-700 hover:border-gray-300 focus:outline-none cursor-pointer"
+                      >
+                        {COLUMNS.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 ))}
               </div>

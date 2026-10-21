@@ -363,7 +363,7 @@ export default function LeadsPage() {
                 <SlidersHorizontal size={14} className="text-gray-400" />
                 Videos to scan:
               </span>
-              <div className="inline-flex rounded-xl p-1 bg-gray-100 border border-gray-200/80">
+              <div className="inline-flex flex-wrap rounded-xl p-1 bg-gray-100 border border-gray-200/80">
                 {[10, 25, 50, 100].map((num) => (
                   <button
                     key={num}
@@ -517,8 +517,8 @@ export default function LeadsPage() {
 
           {/* Leads Table */}
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-white">
+            <table className="w-full divide-y divide-gray-200 block md:table">
+              <thead className="bg-white hidden md:table-header-group">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
                     YouTube Channel
@@ -534,71 +534,80 @@ export default function LeadsPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
+              <tbody className="divide-y divide-gray-100 bg-white block md:table-row-group">
                 {leads.map((lead, i) => (
-                  <tr key={i} className="hover:bg-gray-50 transition-colors group">
-                    <td className="px-6 py-5 whitespace-nowrap">
+                  <tr key={i} className="p-4 md:p-0 block md:table-row hover:bg-gray-50/80 transition-colors group">
+                    <td className="block md:table-cell md:px-6 md:py-5 py-1.5 whitespace-nowrap">
                       <div className="flex items-center">
-                        <PlaySquare size={18} className="text-red-500 mr-3 shrink-0" />
+                        <PlaySquare size={18} className="text-red-500 mr-2.5 shrink-0" />
                         <div>
                           {lead.channelCustomUrl ? (
                             <a
                               href={`https://youtube.com/${lead.channelCustomUrl}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="font-semibold text-gray-900 hover:text-black hover:underline flex items-center gap-1"
+                              className="font-semibold text-gray-900 hover:text-black hover:underline flex items-center gap-1 text-sm md:text-base"
                             >
                               <span>{lead.channelName}</span>
                               <ExternalLink size={12} className="opacity-40" />
                             </a>
                           ) : (
-                            <span className="font-semibold text-gray-900">{lead.channelName}</span>
+                            <span className="font-semibold text-gray-900 text-sm md:text-base">{lead.channelName}</span>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      {lead.instagram ? (
+                    <td className="block md:table-cell md:px-6 md:py-5 py-1.5 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block md:hidden text-xs text-gray-400 font-semibold uppercase mr-1">Instagram:</span>
+                        {lead.instagram ? (
+                          <a
+                            href={`https://instagram.com/${lead.instagram}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors text-sm"
+                          >
+                            <AtSign size={15} className="mr-1 opacity-70 shrink-0" /> {lead.instagram}
+                          </a>
+                        ) : (
+                          <span className="text-gray-400 text-xs italic">Not in bio</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="block md:table-cell md:px-6 md:py-5 py-1.5 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block md:hidden text-xs text-gray-400 font-semibold uppercase mr-1">Email:</span>
+                        {lead.email ? (
+                          <a
+                            href={`mailto:${lead.email}`}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 transition-colors"
+                            title="Click to compose email"
+                          >
+                            <Mail size={13} className="text-emerald-600 shrink-0" />
+                            <span>{lead.email}</span>
+                          </a>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="block md:table-cell md:px-6 md:py-5 py-1.5 whitespace-nowrap text-sm">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block md:hidden text-xs text-gray-400 font-semibold uppercase mr-1 shrink-0">Source Video:</span>
                         <a
-                          href={`https://instagram.com/${lead.instagram}`}
+                          href={lead.videoUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                          className="text-gray-500 hover:text-gray-900 inline-flex items-center max-w-[280px] truncate transition-colors"
+                          title={lead.videoTitle}
                         >
-                          <AtSign size={16} className="mr-1.5 opacity-70 shrink-0" /> {lead.instagram}
+                          <span className="truncate">{lead.videoTitle}</span>
+                          <ExternalLink
+                            size={14}
+                            className="ml-1.5 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity"
+                          />
                         </a>
-                      ) : (
-                        <span className="text-gray-400 text-xs italic">Not in bio</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap">
-                      {lead.email ? (
-                        <a
-                          href={`mailto:${lead.email}`}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 transition-colors"
-                          title="Click to compose email"
-                        >
-                          <Mail size={13} className="text-emerald-600 shrink-0" />
-                          <span>{lead.email}</span>
-                        </a>
-                      ) : (
-                        <span className="text-gray-400 text-xs">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-5 whitespace-nowrap text-sm">
-                      <a
-                        href={lead.videoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-gray-500 hover:text-gray-900 flex items-center max-w-[280px] truncate transition-colors"
-                        title={lead.videoTitle}
-                      >
-                        <span className="truncate">{lead.videoTitle}</span>
-                        <ExternalLink
-                          size={14}
-                          className="ml-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        />
-                      </a>
+                      </div>
                     </td>
                   </tr>
                 ))}

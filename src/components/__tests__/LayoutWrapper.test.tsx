@@ -41,7 +41,7 @@ describe('LayoutWrapper component', () => {
 
     const main = screen.getByTestId('main-layout-wrapper');
     expect(main).toHaveClass('p-0');
-    expect(main).not.toHaveClass('p-8');
+    expect(main).not.toHaveClass('md:p-8');
     expect(screen.getByTestId('child-content')).toBeInTheDocument();
   });
 
@@ -60,7 +60,7 @@ describe('LayoutWrapper component', () => {
 
     await waitFor(() => {
       const main = screen.getByTestId('main-layout-wrapper');
-      expect(main).toHaveClass('p-8');
+      expect(main).toHaveClass('md:p-8');
       expect(main).not.toHaveClass('p-0');
     });
   });
@@ -77,7 +77,7 @@ describe('LayoutWrapper component', () => {
     });
 
     const main = screen.getByTestId('main-layout-wrapper');
-    expect(main).toHaveClass('p-8');
+    expect(main).toHaveClass('md:p-8');
   });
 
   it('applies p-0 on standalone full-width routes like /login and /terms', async () => {
@@ -121,7 +121,7 @@ describe('LayoutWrapper component', () => {
     });
 
     await waitFor(() => {
-      expect(main).toHaveClass('p-8');
+      expect(main).toHaveClass('md:p-8');
     });
   });
 
@@ -136,7 +136,7 @@ describe('LayoutWrapper component', () => {
     );
 
     const main = screen.getByTestId('main-layout-wrapper');
-    expect(main).toHaveClass('p-8');
+    expect(main).toHaveClass('md:p-8');
 
     // Guest navigates to root /
     (usePathname as jest.Mock).mockReturnValue('/');
@@ -147,6 +147,6 @@ describe('LayoutWrapper component', () => {
     );
 
     expect(main).toHaveClass('p-0');
-    expect(main).not.toHaveClass('p-8');
+    expect(main).not.toHaveClass('md:p-8');
   });
 });

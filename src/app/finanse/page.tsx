@@ -228,14 +228,14 @@ export default function FinansePage() {
 
   return (
     <div className="max-w-7xl mx-auto pb-12">
-      <div className="flex justify-between items-end mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-gray-900">Finance & Sales</h2>
           <p className="text-gray-500 mt-1">Track your profit and manage licenses.</p>
         </div>
         
         <div className="flex flex-col items-end">
-          <div className="flex items-center space-x-1 border border-gray-200 rounded-lg p-1 bg-white">
+          <div className="flex flex-wrap items-center space-x-1 border border-gray-200 rounded-lg p-1 bg-white">
             <div className="px-2 text-gray-400"><Filter size={16} /></div>
             {TIME_FILTERS.map(f => (
               <button
@@ -249,7 +249,7 @@ export default function FinansePage() {
           </div>
           
           {timeFilter === 'Custom' && (
-            <div className="flex items-center space-x-2 mt-2 p-2 bg-white border border-gray-200 rounded-lg shadow-sm animate-in fade-in slide-in-from-top-2">
+            <div className="flex flex-wrap items-center gap-2 mt-2 p-2 bg-white border border-gray-200 rounded-lg shadow-sm animate-in fade-in slide-in-from-top-2">
               <span className="text-xs font-semibold text-gray-500 uppercase ml-1">From:</span>
               <div className="border border-gray-200 rounded-md px-2 py-1 focus-within:border-black bg-white flex items-center">
                 <DatePicker 
@@ -297,7 +297,7 @@ export default function FinansePage() {
 
       <div className="mb-8 space-y-4">
         {/* Top Level: Total Combined Revenue */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex items-center justify-between">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-5 border ${displayCurrency === 'USD' ? 'bg-blue-50 border-blue-100' : displayCurrency === 'PLN' ? 'bg-red-50 border-red-100' : displayCurrency === 'EUR' ? 'bg-yellow-50 border-yellow-100' : 'bg-green-50 border-green-100'}`}>
               <TrendingUp size={24} className={`${displayCurrency === 'USD' ? 'text-blue-500' : displayCurrency === 'PLN' ? 'text-red-500' : displayCurrency === 'EUR' ? 'text-yellow-600' : 'text-green-500'}`} />
@@ -334,10 +334,10 @@ export default function FinansePage() {
         </div>
       </div>
 
-      <div className="flex gap-8">
+      <div className="flex flex-col lg:flex-row gap-8">
         {/* Left Panel */}
-        <div className="w-80 shrink-0">
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm sticky top-8">
+        <div className="w-full lg:w-80 shrink-0">
+          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm lg:sticky lg:top-8">
             <h3 className="text-lg font-bold mb-6 flex items-center">
               <span className="text-xl mr-2 font-normal">+</span> Add new sale
             </h3>
@@ -394,8 +394,8 @@ export default function FinansePage() {
         {/* Right Panel */}
         <div className="flex-1">
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-100">
-              <thead className="bg-gray-50">
+            <table className="w-full divide-y divide-gray-100 block md:table">
+              <thead className="bg-gray-50 hidden md:table-header-group">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Beat</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Client</th>
@@ -405,27 +405,35 @@ export default function FinansePage() {
                   <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
+              <tbody className="divide-y divide-gray-100 bg-white block md:table-row-group">
                 {loading ? (
-                  <tr><td colSpan={6} className="p-8 text-center text-gray-500">Loading...</td></tr>
+                  <tr className="block md:table-row"><td colSpan={6} className="p-8 text-center text-gray-500 block md:table-cell">Loading...</td></tr>
                 ) : filteredSales.length === 0 ? (
-                  <tr><td colSpan={6} className="p-12 text-center text-gray-500">No transactions in selected period.</td></tr>
+                  <tr className="block md:table-row"><td colSpan={6} className="p-12 text-center text-gray-500 block md:table-cell">No transactions in selected period.</td></tr>
                 ) : (
                   filteredSales.map(sale => (
-                    <tr key={sale.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap font-bold text-gray-900">{sale.beat_name || sale.beats?.title || 'Unknown'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{sale.client_name || '-'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{sale.license_type}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <tr key={sale.id} className="p-4 md:p-0 block md:table-row hover:bg-gray-50/80 transition-colors">
+                      <td className="block md:table-cell md:px-6 md:py-4 py-1 font-bold text-gray-900 text-base md:text-sm">{sale.beat_name || sale.beats?.title || 'Unknown'}</td>
+                      <td className="block md:table-cell md:px-6 md:py-4 py-1 text-sm text-gray-600">
+                        <span className="inline-block md:hidden text-xs text-gray-400 uppercase font-semibold mr-2">Client:</span>
+                        {sale.client_name || '-'}
+                      </td>
+                      <td className="block md:table-cell md:px-6 md:py-4 py-1 text-sm text-gray-600">
+                        <span className="inline-block md:hidden text-xs text-gray-400 uppercase font-semibold mr-2">License:</span>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-800 rounded text-xs font-medium md:bg-transparent md:p-0 md:text-sm">{sale.license_type}</span>
+                      </td>
+                      <td className="block md:table-cell md:px-6 md:py-4 py-1 text-sm text-gray-500">
+                        <span className="inline-block md:hidden text-xs text-gray-400 uppercase font-semibold mr-2">Date:</span>
                         {new Date(sale.created_at).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                      <td className="block md:table-cell md:px-6 md:py-4 py-1 font-medium text-gray-900">
+                        <span className="inline-block md:hidden text-xs text-gray-400 uppercase font-semibold mr-2">Amount:</span>
                         {(() => {
                           const c = sale.currency || 'USD';
-                          return c === 'USD' ? `$${sale.amount.toFixed(2)}` : c === 'EUR' ? `€${sale.amount.toFixed(2)}` : `${sale.amount.toFixed(2)} ${c}`;
+                          return c === 'USD' ? `${sale.amount.toFixed(2)}` : c === 'EUR' ? `€${sale.amount.toFixed(2)}` : `${sale.amount.toFixed(2)} ${c}`;
                         })()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <td className="block md:table-cell md:px-6 md:py-4 py-2 text-left md:text-right pt-2 md:pt-4 border-t border-gray-100 md:border-t-0">
                         <button onClick={() => setSaleToDelete(sale.id)} className="text-red-400 hover:text-red-600 font-medium text-sm transition-colors">Delete</button>
                       </td>
                     </tr>

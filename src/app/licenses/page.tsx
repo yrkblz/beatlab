@@ -34,6 +34,7 @@ export default function LicensesPage() {
   const [producerPublishing, setProducerPublishing] = useState('0');
 
   // Form State
+  const [mobileTab, setMobileTab] = useState<'form' | 'preview'>('form');
   const [selectedBeatId, setSelectedBeatId] = useState('');
   const [customBeatName, setCustomBeatName] = useState('');
   const [buyerName, setBuyerName] = useState(''); // Licensee
@@ -198,9 +199,31 @@ export default function LicensesPage() {
   const parsedPublishing = Math.min(100, Math.max(0, Number(producerPublishing || 0)));
 
   return (
-    <div className="max-w-7xl mx-auto pb-12 flex items-stretch gap-8 print:block">
+    <div className="max-w-7xl mx-auto pb-12 flex flex-col md:flex-row items-stretch gap-8 print:block">
+      {/* Mobile Tab Switcher */}
+      <div className="flex md:hidden bg-gray-100 p-1 rounded-xl border border-gray-200 shrink-0 print:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileTab('form')}
+          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+            mobileTab === 'form' ? 'bg-white text-black shadow-xs' : 'text-gray-500 hover:text-black'
+          }`}
+        >
+          1. Edit Details
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab('preview')}
+          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+            mobileTab === 'preview' ? 'bg-white text-black shadow-xs' : 'text-gray-500 hover:text-black'
+          }`}
+        >
+          2. Document Preview & PDF
+        </button>
+      </div>
+
       {/* Configuration Panel - Hidden when printing */}
-      <div className="w-1/3 shrink-0 print:hidden flex flex-col">
+      <div className={`w-full md:w-1/3 shrink-0 print:hidden flex-col ${mobileTab === 'form' ? 'flex' : 'hidden md:flex'}`}>
         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex-1 flex flex-col">
           <div className="flex-1">
             <h2 className="text-xl font-bold mb-6">License Generator Settings</h2>
@@ -380,6 +403,13 @@ export default function LicensesPage() {
               <Printer size={16} />
               <span>Print / Download PDF</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab('preview')}
+              className="md:hidden w-full mt-2 text-center py-2 text-xs font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              View Document Preview →
+            </button>
           </div>
         </div>
       </div>
@@ -387,8 +417,15 @@ export default function LicensesPage() {
 
 
       {/* Preview Panel - This gets printed */}
-      <div className="flex-1 flex flex-col print:block print:w-full print:m-0 print:bg-white print:text-black">
-        <div className="grow bg-white border border-gray-200 rounded-xl p-10 shadow-sm min-h-[842px] print:border-none print:shadow-none print:p-0 font-serif break-words">
+      <div className={`flex-1 flex-col print:block print:w-full print:m-0 print:bg-white print:text-black ${mobileTab === 'preview' ? 'flex' : 'hidden md:flex'}`}>
+        <div className="grow bg-white border border-gray-200 rounded-xl p-6 sm:p-8 md:p-10 shadow-sm min-h-[842px] print:border-none print:shadow-none print:p-0 font-serif break-words">
+          <button
+            type="button"
+            onClick={() => setMobileTab('form')}
+            className="md:hidden mb-6 text-xs font-semibold text-gray-600 hover:text-black flex items-center gap-1.5 py-1.5 px-3 bg-gray-50 border border-gray-200 rounded-lg w-fit print:hidden"
+          >
+            ← Back to Configuration
+          </button>
           
           <h1 className="text-3xl font-serif font-bold text-center mb-2">BEAT LICENSE AGREEMENT</h1>
           <p className="text-center italic mb-8">Type: <span className="text-blue-600 font-bold">{currentLicense.id === 'exclusive' ? 'Exclusive Rights' : 'Non-Exclusive Rights'}</span></p>
