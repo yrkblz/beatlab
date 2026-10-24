@@ -149,4 +149,115 @@ describe('Mailer Page (/mailer) Multi-Tenant Privacy & Isolation', () => {
       expect(screen.getByText(/No campaigns\./i)).toBeInTheDocument();
     });
   });
+
+  it('allows selecting all beats in catalog with Select All button', async () => {
+    const mockSession = {
+      user: mockUserA,
+      provider_token: 'google-token-123',
+    };
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: mockSession },
+    });
+
+    mockOrder.mockResolvedValue({
+      data: [
+        { id: 'beat-1', title: 'Midnight Trap', file_url: 'https://example.com/1.mp3', user_id: mockUserA.id },
+        { id: 'beat-2', title: 'Dark Melody', file_url: 'https://example.com/2.mp3', user_id: mockUserA.id }
+      ],
+      error: null,
+    });
+
+    await act(async () => {
+      render(<MailerPage />);
+    });
+
+    // Check that Select All button exists in Beat Catalog
+    await waitFor(() => {
+      expect(screen.getByText(/2 beats available/i)).toBeInTheDocument();
+    });
+
+    const selectAllBtn = screen.getByRole('button', { name: /Select All/i });
+    expect(selectAllBtn).toBeInTheDocument();
+
+    // Click Select All
+    await act(async () => {
+      fireEvent.click(selectAllBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Deselect All/i })).toBeInTheDocument();
+      expect(screen.getByText(/Attachments to download/i)).toBeInTheDocument();
+    });
+
+    // Click Deselect All
+    const deselectBtn = screen.getByRole('button', { name: /Deselect All/i });
+    await act(async () => {
+      fireEvent.click(deselectBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Select All/i })).toBeInTheDocument();
+      expect(screen.queryByText(/Attachments to download/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('allows scheduling a campaign for later and viewing it in Scheduled Queue', async () => {
+    const mockSession = {
+      user: mockUserA,
+      provider_token: 'google-token-123',
+    };
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: mockSession },
+    });
+
+    mockOrder.mockResolvedValue({ data: [], error: null });
+
+    await act(async () => {
+      render(<MailerPage />);
+    });
+
+    // Fill out form
+    const recipientsInput = screen.getByPlaceholderText(/raper1@gmail.com/i);
+    const campaignInput = screen.getByPlaceholderText(/e.g. Spring Beat Pack 2026/i);
+    const subjectInput = screen.getByPlaceholderText(/e.g. 🔥 Exclusive Beat Pack/i);
+    const bodyInput = screen.getByPlaceholderText(/Hey! Here are my latest beats.../i);
+
+    fireEvent.change(recipientsInput, { target: { value: 'rapper@gmail.com' } });
+    fireEvent.change(campaignInput, { target: { value: 'October Heat Pack' } });
+    fireEvent.change(subjectInput, { target: { value: 'Exclusive beats for you' } });
+    fireEvent.change(bodyInput, { target: { value: 'Listen to these new beats' } });
+
+    // Toggle Schedule Send checkbox
+    const scheduleToggle = screen.getByLabelText(/Schedule message for later/i);
+    await act(async () => {
+      fireEvent.click(scheduleToggle);
+    });
+
+    // Verify Schedule Campaign button is present
+    expect(screen.getByRole('button', { name: /Schedule Campaign/i })).toBeInTheDocument();
+
+    // Click Schedule Campaign button
+    const scheduleBtn = screen.getByRole('button', { name: /Schedule Campaign/i });
+    await act(async () => {
+      fireEvent.click(scheduleBtn);
+    });
+
+    // Verify success status
+    await waitFor(() => {
+      expect(screen.getAllByText(/Campaign scheduled successfully!/i).length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Switch to Scheduled Queue tab
+    const queueTab = screen.getByRole('button', { name: /Scheduled Queue/i });
+    await act(async () => {
+      fireEvent.click(queueTab);
+    });
+
+    // Check that campaign is listed in the queue
+    await waitFor(() => {
+      expect(screen.getByText('October Heat Pack')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Send Now/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument();
+    });
+  });
 });

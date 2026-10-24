@@ -1,11 +1,57 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Mail, Send, Users, LogIn, LogOut, Music2, HardDrive, Paperclip, CheckCircle2, BarChart3, Eye, Calendar, Folder, ArrowLeft, Trash2 } from 'lucide-react';
+import { Mail, Send, Users, LogIn, LogOut, Music2, HardDrive, Paperclip, CheckCircle2, BarChart3, Eye, Calendar, Folder, ArrowLeft, Trash2, CheckSquare, Clock, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
+
+export interface ScheduledCampaign {
+  id: string;
+  campaignName: string;
+  subject: string;
+  message: string;
+  emails: string[];
+  attachments: { name: string; link: string }[];
+  scheduledFor: string;
+  createdAt: string;
+  userId: string;
+  status: 'scheduled' | 'sending' | 'sent' | 'failed';
+  error?: string;
+}
+
+function getScheduledStorageKey(userId?: string) {
+  return userId ? `beatlab_scheduled_campaigns_${userId}` : 'beatlab_scheduled_campaigns';
+}
+
+function loadScheduledCampaigns(userId?: string): ScheduledCampaign[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(getScheduledStorageKey(userId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Error loading scheduled campaigns:', e);
+  }
+  return [];
+}
+
+function saveScheduledCampaigns(items: ScheduledCampaign[], userId?: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(getScheduledStorageKey(userId), JSON.stringify(items));
+  } catch (e) {
+    console.error('Error saving scheduled campaigns:', e);
+  }
+}
+
 export default function MailerPage() {
-  const [activeTab, setActiveTab] = useState<'send' | 'stats'>('send');
+  const [activeTab, setActiveTab] = useState<'send' | 'scheduled' | 'stats'>('send');
+  const [scheduledCampaigns, setScheduledCampaigns] = useState<ScheduledCampaign[]>([]);
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledNotice, setScheduledNotice] = useState<string | null>(null);
   const [session, setSession] = useState<any>(null);
 
   // Form State
@@ -56,6 +102,7 @@ export default function MailerPage() {
       setSession(session);
       if (session?.user) {
         loadSupabaseBeats(session.user.id);
+        setScheduledCampaigns(loadScheduledCampaigns(session.user.id));
         if (session.provider_token) loadDriveFiles(session.provider_token, 'root');
         if (activeTab === 'stats') {
           fetchCampaignStats(session.user.id);
@@ -240,6 +287,50 @@ export default function MailerPage() {
     }
   }
 
+    // Select All logic for Google Drive and Beat Catalog
+  const selectableDriveFiles = driveFiles.filter(
+    f => f.mimeType !== 'application/vnd.google-apps.folder' && f.webViewLink
+  );
+  const isAllDriveSelected =
+    selectableDriveFiles.length > 0 &&
+    selectableDriveFiles.every(f => selectedAttachments.some(a => a.link === f.webViewLink));
+
+  function toggleSelectAllDrive() {
+    if (selectableDriveFiles.length === 0) return;
+    if (isAllDriveSelected) {
+      const currentLinks = new Set(selectableDriveFiles.map(f => f.webViewLink));
+      setSelectedAttachments(selectedAttachments.filter(a => !currentLinks.has(a.link)));
+    } else {
+      const newItems = [...selectedAttachments];
+      for (const f of selectableDriveFiles) {
+        if (!newItems.some(a => a.link === f.webViewLink)) {
+          newItems.push({ name: f.name, link: f.webViewLink });
+        }
+      }
+      setSelectedAttachments(newItems);
+    }
+  }
+
+  const isAllSupabaseSelected =
+    supabaseBeats.length > 0 &&
+    supabaseBeats.every(b => selectedAttachments.some(a => a.link === b.file_url));
+
+  function toggleSelectAllSupabase() {
+    if (supabaseBeats.length === 0) return;
+    if (isAllSupabaseSelected) {
+      const currentLinks = new Set(supabaseBeats.map(b => b.file_url));
+      setSelectedAttachments(selectedAttachments.filter(a => !currentLinks.has(a.link)));
+    } else {
+      const newItems = [...selectedAttachments];
+      for (const b of supabaseBeats) {
+        if (!newItems.some(a => a.link === b.file_url)) {
+          newItems.push({ name: b.title, link: b.file_url });
+        }
+      }
+      setSelectedAttachments(newItems);
+    }
+  }
+
   function toggleAttachment(name: string, link: string) {
     if (!link) return alert('This file does not have a valid shareable link.');
     const exists = selectedAttachments.find(a => a.link === link);
@@ -250,25 +341,17 @@ export default function MailerPage() {
     }
   }
 
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault();
+  async function dispatchMail(payload: {
+    emails: string[];
+    campaignName: string;
+    subject: string;
+    message: string;
+    attachments: { name: string; link: string }[];
+  }): Promise<{ success: boolean; error?: string }> {
     if (!session?.provider_token) {
-      setStatus('Error: Session expired. Please log out and log in again.');
-      return;
+      return { success: false, error: 'Session expired. Please log out and log in again.' };
     }
 
-    setSending(true);
-    setStatus('Creating campaign and sending via Google API...');
-
-    const emailList = emails.split(/[\n,]+/).map(e => e.trim()).filter(e => e.includes('@'));
-
-    if (emailList.length === 0) {
-      setStatus('Error: Please provide at least one valid email address.');
-      setSending(false);
-      return;
-    }
-
-    // Obtain fresh access_token for Supabase RLS authentication
     let userToken = session?.access_token;
     try {
       const { data: refreshData } = await supabase.auth.getSession();
@@ -285,11 +368,11 @@ export default function MailerPage() {
           ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
         },
         body: JSON.stringify({ 
-          emails: emailList, 
-          campaignName,
-          subject, 
-          message,
-          attachments: selectedAttachments,
+          emails: payload.emails, 
+          campaignName: payload.campaignName,
+          subject: payload.subject, 
+          message: payload.message,
+          attachments: payload.attachments,
           accessToken: session.provider_token,
           userToken,
           senderEmail: session.user.email,
@@ -298,20 +381,165 @@ export default function MailerPage() {
       });
 
       if (res.ok) {
-        setStatus(`Success! Sent emails to ${emailList.length} recipients.`);
-        setEmails('');
-        setSubject('');
-        setCampaignName('');
-        setMessage('');
-        setSelectedAttachments([]);
+        return { success: true };
       } else {
         const data = await res.json();
-        setStatus(`Sending error: ${data.error}`);
+        return { success: false, error: data.error || 'Failed to send campaign emails.' };
       }
-    } catch (err) {
-      setStatus(`Error connecting to the API server.`);
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error connecting to the API server.' };
+    }
+  }
+
+  // Automatic Background Worker for Scheduled Campaigns
+  useEffect(() => {
+    if (!session?.provider_token || !session?.user?.id) return;
+
+    const timer = setInterval(async () => {
+      const stored = loadScheduledCampaigns(session.user.id);
+      const now = Date.now();
+      const due = stored.find(c => c.status === 'scheduled' && new Date(c.scheduledFor).getTime() <= now);
+
+      if (due) {
+        due.status = 'sending';
+        saveScheduledCampaigns(stored, session.user.id);
+        setScheduledCampaigns([...stored]);
+
+        const res = await dispatchMail({
+          emails: due.emails,
+          campaignName: due.campaignName,
+          subject: due.subject,
+          message: due.message,
+          attachments: due.attachments
+        });
+
+        if (res.success) {
+          due.status = 'sent';
+          saveScheduledCampaigns(stored, session.user.id);
+          setScheduledCampaigns([...stored]);
+          setScheduledNotice(`Scheduled campaign "${due.campaignName}" has been dispatched!`);
+          fetchCampaignStats(session.user.id);
+        } else {
+          due.status = 'failed';
+          due.error = res.error;
+          saveScheduledCampaigns(stored, session.user.id);
+          setScheduledCampaigns([...stored]);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [session?.provider_token, session?.user?.id]);
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    if (!session?.provider_token) {
+      setStatus('Error: Session expired. Please log out and log in again.');
+      return;
+    }
+
+    const emailList = emails.split(/[\n,]+/).map(e => e.trim()).filter(e => e.includes('@'));
+    if (emailList.length === 0) {
+      setStatus('Error: Please provide at least one valid email address.');
+      return;
+    }
+
+    if (isScheduled) {
+      if (!scheduledDate) {
+        setStatus('Error: Please select a valid date and time for the scheduled send.');
+        return;
+      }
+      const targetTime = new Date(scheduledDate);
+      if (isNaN(targetTime.getTime()) || targetTime.getTime() <= Date.now()) {
+        setStatus('Error: Scheduled time must be in the future.');
+        return;
+      }
+
+      const newScheduledItem: ScheduledCampaign = {
+        id: `sched_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        campaignName: campaignName.trim() || subject.trim() || 'Untitled Campaign',
+        subject: subject.trim(),
+        message,
+        emails: emailList,
+        attachments: selectedAttachments,
+        scheduledFor: targetTime.toISOString(),
+        createdAt: new Date().toISOString(),
+        userId: session.user.id,
+        status: 'scheduled'
+      };
+
+      const updated = [newScheduledItem, ...scheduledCampaigns];
+      setScheduledCampaigns(updated);
+      saveScheduledCampaigns(updated, session.user.id);
+
+      setStatus(`Campaign scheduled successfully! It will be sent on ${targetTime.toLocaleString()}.`);
+      setEmails('');
+      setSubject('');
+      setCampaignName('');
+      setMessage('');
+      setSelectedAttachments([]);
+      setIsScheduled(false);
+      setScheduledDate('');
+      return;
+    }
+
+    setSending(true);
+    setStatus('Creating campaign and sending via Google API...');
+    const result = await dispatchMail({
+      emails: emailList,
+      campaignName,
+      subject,
+      message,
+      attachments: selectedAttachments
+    });
+
+    if (result.success) {
+      setStatus(`Success! Sent emails to ${emailList.length} recipients.`);
+      setEmails('');
+      setSubject('');
+      setCampaignName('');
+      setMessage('');
+      setSelectedAttachments([]);
+      fetchCampaignStats(session.user.id);
+    } else {
+      setStatus(`Sending error: ${result.error}`);
     }
     setSending(false);
+  }
+
+  async function triggerScheduledNow(id: string) {
+    const item = scheduledCampaigns.find(c => c.id === id);
+    if (!item) return;
+
+    const updated = scheduledCampaigns.map(c => c.id === id ? { ...c, status: 'sending' as const } : c);
+    setScheduledCampaigns(updated);
+    saveScheduledCampaigns(updated, session?.user?.id);
+
+    const res = await dispatchMail({
+      emails: item.emails,
+      campaignName: item.campaignName,
+      subject: item.subject,
+      message: item.message,
+      attachments: item.attachments
+    });
+
+    if (res.success) {
+      const finished = scheduledCampaigns.map(c => c.id === id ? { ...c, status: 'sent' as const } : c);
+      setScheduledCampaigns(finished);
+      saveScheduledCampaigns(finished, session?.user?.id);
+      setScheduledNotice(`Campaign "${item.campaignName}" has been sent successfully!`);
+      fetchCampaignStats(session?.user?.id);
+    } else {
+      const failed = scheduledCampaigns.map(c => c.id === id ? { ...c, status: 'failed' as const, error: res.error } : c);
+      setScheduledCampaigns(failed);
+      saveScheduledCampaigns(failed, session?.user?.id);
+    }
+  }
+
+  function deleteScheduledItem(id: string) {
+    const remaining = scheduledCampaigns.filter(c => c.id !== id);
+    setScheduledCampaigns(remaining);
+    saveScheduledCampaigns(remaining, session?.user?.id);
   }
 
   if (!session) {
@@ -355,6 +583,17 @@ export default function MailerPage() {
           className={`flex items-center pb-3 px-4 font-medium border-b-2 transition-colors ${activeTab === 'send' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'}`}
         >
           <Mail size={18} className="mr-2" /> Send Pack
+        </button>
+        <button 
+          onClick={() => setActiveTab('scheduled')}
+          className={`flex items-center pb-3 px-4 font-medium border-b-2 transition-colors ${activeTab === 'scheduled' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'}`}
+        >
+          <Clock size={18} className="mr-2" /> Scheduled Queue
+          {scheduledCampaigns.filter(c => c.status === 'scheduled').length > 0 && (
+            <span className="ml-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+              {scheduledCampaigns.filter(c => c.status === 'scheduled').length}
+            </span>
+          )}
         </button>
         <button 
           onClick={() => setActiveTab('stats')}
@@ -439,9 +678,122 @@ export default function MailerPage() {
                   </div>
                 )}
 
-                <button type="submit" disabled={sending} className="w-full flex items-center justify-center bg-black text-white font-medium py-3 px-4 rounded-lg text-sm hover:bg-gray-800 transition-colors disabled:opacity-50">
-                  <Send size={18} className="mr-2" />
-                  {sending ? 'Sending...' : 'Start Sending'}
+                {/* Schedule Send Option */}
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Clock size={16} className={isScheduled ? 'text-blue-600' : 'text-gray-400'} />
+                      <div>
+                        <p className="text-xs font-semibold text-gray-800">Schedule message for later</p>
+                        <p className="text-[11px] text-gray-500">Pick a future date & time to dispatch this campaign automatically</p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        aria-label="Schedule message for later"
+                        checked={isScheduled} 
+                        onChange={(e) => {
+                          setIsScheduled(e.target.checked);
+                          if (e.target.checked && !scheduledDate) {
+                            const d = new Date();
+                            d.setDate(d.getDate() + 1);
+                            d.setHours(10, 0, 0, 0);
+                            const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                            setScheduledDate(localIso);
+                          }
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-black"></div>
+                    </label>
+                  </div>
+
+                  {isScheduled && (
+                    <div className="pt-3 border-t border-gray-200 space-y-3 animate-in fade-in">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Delivery Date & Time:
+                        </label>
+                        <input 
+                          type="datetime-local" 
+                          value={scheduledDate}
+                          min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+                          onChange={(e) => setScheduledDate(e.target.value)}
+                          className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black font-sans"
+                          required={isScheduled}
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-gray-400 font-medium mr-1">Quick presets:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + 1);
+                            d.setHours(10, 0, 0, 0);
+                            setScheduledDate(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+                          }}
+                          className="text-[11px] font-medium text-gray-700 bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors shadow-2xs"
+                        >
+                          Tomorrow 10:00
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + 1);
+                            d.setHours(18, 0, 0, 0);
+                            setScheduledDate(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+                          }}
+                          className="text-[11px] font-medium text-gray-700 bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors shadow-2xs"
+                        >
+                          Tomorrow 18:00
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + 2);
+                            d.setHours(12, 0, 0, 0);
+                            setScheduledDate(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+                          }}
+                          className="text-[11px] font-medium text-gray-700 bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-100 px-2 py-1 rounded-md transition-colors shadow-2xs"
+                        >
+                          In 2 days 12:00
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {status && (
+                  <div className={`p-4 rounded-lg text-sm font-medium border ${status.includes('Error') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                    {status}
+                  </div>
+                )}
+
+                <button 
+                  type="submit" 
+                  disabled={sending} 
+                  className={`w-full flex items-center justify-center font-medium py-3 px-4 rounded-lg text-sm transition-colors disabled:opacity-50 cursor-pointer ${
+                    isScheduled 
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' 
+                      : 'bg-black hover:bg-gray-800 text-white'
+                  }`}
+                >
+                  {isScheduled ? (
+                    <>
+                      <Clock size={18} className="mr-2" />
+                      <span>Schedule Campaign</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={18} className="mr-2" />
+                      <span>{sending ? 'Sending...' : 'Start Sending'}</span>
+                    </>
+                  )}
                 </button>
               </form>
             )}
@@ -473,17 +825,36 @@ export default function MailerPage() {
                 <div className="flex-1 overflow-y-auto p-2">
                   {attachmentSource === 'supabase' && (
                     <div className="space-y-1">
-                      {supabaseBeats.length === 0 ? <p className="text-center text-gray-500 text-sm mt-8">No beats in catalog.</p> : supabaseBeats.map(beat => {
-                          const isSelected = selectedAttachments.some(a => a.link === beat.file_url);
-                          return (
-                            <div key={beat.id} onClick={() => toggleAttachment(beat.title, beat.file_url)} className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-200 border' : 'hover:bg-gray-50 border border-transparent'}`}>
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-sm font-medium truncate ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>{beat.title}</p>
+                      {supabaseBeats.length === 0 ? (
+                        <p className="text-center text-gray-500 text-sm mt-8">No beats in catalog.</p>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between px-2 py-2 mb-2 bg-gray-50 rounded-lg text-sm text-gray-600">
+                            <span className="text-xs font-medium text-gray-600">
+                              {supabaseBeats.length} beat{supabaseBeats.length > 1 ? 's' : ''} available
+                            </span>
+                            <button
+                              type="button"
+                              onClick={toggleSelectAllSupabase}
+                              className="text-xs font-semibold text-gray-700 hover:text-black bg-white hover:bg-gray-100 border border-gray-300 px-2.5 py-1 rounded-md transition-colors shadow-xs flex items-center gap-1 cursor-pointer"
+                            >
+                              <CheckSquare size={13} className="text-blue-600" />
+                              <span>{isAllSupabaseSelected ? 'Deselect All' : 'Select All'}</span>
+                            </button>
+                          </div>
+                          {supabaseBeats.map(beat => {
+                            const isSelected = selectedAttachments.some(a => a.link === beat.file_url);
+                            return (
+                              <div key={beat.id} onClick={() => toggleAttachment(beat.title, beat.file_url)} className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-200 border' : 'hover:bg-gray-50 border border-transparent'}`}>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium truncate ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>{beat.title}</p>
+                                </div>
+                                {isSelected ? <CheckCircle2 size={18} className="text-blue-600" /> : <div className="w-4 h-4 border-2 border-gray-300 rounded-sm" />}
                               </div>
-                              {isSelected ? <CheckCircle2 size={18} className="text-blue-600" /> : <div className="w-4 h-4 border-2 border-gray-300 rounded-sm" />}
-                            </div>
-                          )
-                        })}
+                            );
+                          })}
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -498,16 +869,28 @@ export default function MailerPage() {
                         <span className="font-medium truncate flex-1">
                           {driveHistory[driveHistory.length - 1].name}
                         </span>
-                        {session?.provider_token && (
-                          <button
-                            type="button"
-                            onClick={() => loadDriveFiles(session.provider_token!, driveHistory[driveHistory.length - 1].id)}
-                            className="text-xs text-blue-600 hover:text-blue-800 ml-2 font-medium"
-                            title="Refresh folder"
-                          >
-                            Refresh
-                          </button>
-                        )}
+                        <div className="flex items-center gap-1.5 ml-2">
+                          {selectableDriveFiles.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={toggleSelectAllDrive}
+                              className="text-xs font-semibold text-gray-700 hover:text-black bg-white hover:bg-gray-100 border border-gray-300 px-2.5 py-1 rounded-md transition-colors shadow-xs flex items-center gap-1 cursor-pointer"
+                            >
+                              <CheckSquare size={13} className="text-blue-600" />
+                              <span>{isAllDriveSelected ? 'Deselect All' : 'Select All'}</span>
+                            </button>
+                          )}
+                          {session?.provider_token && (
+                            <button
+                              type="button"
+                              onClick={() => loadDriveFiles(session.provider_token!, driveHistory[driveHistory.length - 1].id)}
+                              className="text-xs text-blue-600 hover:text-blue-800 font-medium px-1 py-1"
+                              title="Refresh folder"
+                            >
+                              Refresh
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <div className="space-y-1 flex-1 overflow-y-auto">
@@ -571,6 +954,129 @@ export default function MailerPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      
+      {activeTab === 'scheduled' && (
+        <div className="bg-white border border-[#d2d2d7] rounded-xl p-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-6 pb-4 border-b border-gray-200">
+            <div>
+              <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                <Clock size={20} className="mr-2 text-blue-600" />
+                Scheduled Campaigns Queue
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Campaigns scheduled to send automatically at the chosen date and time.
+              </p>
+            </div>
+            <span className="text-xs font-semibold bg-gray-100 text-gray-700 px-3 py-1 rounded-full">
+              {scheduledCampaigns.filter(c => c.status === 'scheduled').length} pending
+            </span>
+          </div>
+
+          {scheduledNotice && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm flex items-center justify-between">
+              <span>{scheduledNotice}</span>
+              <button onClick={() => setScheduledNotice(null)} className="text-blue-500 hover:text-blue-700 text-xs font-bold ml-2">Dismiss</button>
+            </div>
+          )}
+
+          {scheduledCampaigns.length === 0 ? (
+            <div className="text-center py-16 text-gray-500">
+              <Clock size={40} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-base font-semibold text-gray-700">No scheduled campaigns</p>
+              <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+                When you compose an email in &quot;Send Pack&quot; and toggle &quot;Schedule message for later&quot;, it will be queued here.
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('send')}
+                className="mt-4 px-4 py-2 bg-black text-white text-xs font-medium rounded-lg hover:bg-gray-800 transition-colors cursor-pointer"
+              >
+                Schedule your first campaign
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {scheduledCampaigns.map((item) => {
+                const targetDate = new Date(item.scheduledFor);
+                const isPast = targetDate.getTime() <= Date.now();
+                return (
+                  <div
+                    key={item.id}
+                    className="border border-gray-200 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-gray-300 transition-colors"
+                  >
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-gray-900 text-sm">{item.campaignName}</span>
+                        <span className="text-xs text-gray-500 truncate max-w-xs">({item.subject})</span>
+                        {item.status === 'scheduled' && (
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                            isPast ? 'bg-amber-100 text-amber-800' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                          }`}>
+                            {isPast ? 'Sending soon' : `Scheduled for ${targetDate.toLocaleString()}`}
+                          </span>
+                        )}
+                        {item.status === 'sending' && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 animate-pulse">
+                            Sending now...
+                          </span>
+                        )}
+                        {item.status === 'sent' && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Sent
+                          </span>
+                        )}
+                        {item.status === 'failed' && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
+                            Failed: {item.error || 'Network error'}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 pt-1">
+                        <span className="flex items-center gap-1">
+                          <Users size={13} className="text-gray-400" />
+                          {item.emails.length} recipient{item.emails.length > 1 ? 's' : ''}
+                        </span>
+                        {item.attachments.length > 0 && (
+                          <span className="flex items-center gap-1">
+                            <Paperclip size={13} className="text-gray-400" />
+                            {item.attachments.length} attachment{item.attachments.length > 1 ? 's' : ''}
+                          </span>
+                        )}
+                        <span className="text-gray-400">
+                          Created {new Date(item.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {item.status === 'scheduled' && (
+                        <button
+                          type="button"
+                          onClick={() => triggerScheduledNow(item.id)}
+                          className="px-3 py-1.5 bg-black hover:bg-gray-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Send size={12} />
+                          <span>Send Now</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => deleteScheduledItem(item.id)}
+                        className="px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <Trash2 size={13} />
+                        <span>{item.status === 'scheduled' ? 'Cancel' : 'Delete'}</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
