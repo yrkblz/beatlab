@@ -31,6 +31,7 @@ import { exportLeadsToExcel, exportLeadsToCsv } from '@/lib/instagram-export';
 
 export const IG_HISTORY_STORAGE_KEY = 'beatlab_instagram_leads_history';
 export const RAPIDAPI_KEY_STORAGE_KEY = 'beatlab_rapidapi_key';
+export const RAPIDAPI_HOST_STORAGE_KEY = 'beatlab_rapidapi_host';
 
 export default function InstagramLeadsPage() {
   // Input & Collection parameters
@@ -48,8 +49,10 @@ export default function InstagramLeadsPage() {
 
   // API Key Settings Modal
   const [apiKey, setApiKey] = useState('');
+  const [apiHost, setApiHost] = useState('instagram-scraper-stable-api.p.rapidapi.com');
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [tempApiKey, setTempApiKey] = useState('');
+  const [tempApiHost, setTempApiHost] = useState('instagram-scraper-stable-api.p.rapidapi.com');
 
   // Results & UI state
   const [loading, setLoading] = useState(false);
@@ -78,6 +81,12 @@ export default function InstagramLeadsPage() {
       if (storedKey) {
         setApiKey(storedKey);
         setTempApiKey(storedKey);
+      }
+
+      const storedHost = localStorage.getItem(RAPIDAPI_HOST_STORAGE_KEY);
+      if (storedHost) {
+        setApiHost(storedHost);
+        setTempApiHost(storedHost);
       }
     } catch (e) {
       console.error('Error loading localStorage:', e);
@@ -125,6 +134,7 @@ export default function InstagramLeadsPage() {
           onlyWithContact,
           keepUncategorized,
           apiKey: apiKey.trim() || undefined,
+          apiHost: apiHost.trim() || undefined,
         }),
       });
 
@@ -156,12 +166,15 @@ export default function InstagramLeadsPage() {
     }
   }
 
-  // Save API key
+  // Save API key & host
   function handleSaveApiKey(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = tempApiKey.trim();
-    setApiKey(trimmed);
-    localStorage.setItem(RAPIDAPI_KEY_STORAGE_KEY, trimmed);
+    const trimmedKey = tempApiKey.trim();
+    const trimmedHost = tempApiHost.trim();
+    setApiKey(trimmedKey);
+    setApiHost(trimmedHost);
+    localStorage.setItem(RAPIDAPI_KEY_STORAGE_KEY, trimmedKey);
+    localStorage.setItem(RAPIDAPI_HOST_STORAGE_KEY, trimmedHost);
     setIsApiKeyModalOpen(false);
   }
 
@@ -801,13 +814,31 @@ export default function InstagramLeadsPage() {
 
             <p className="text-xs text-gray-600 leading-relaxed">
               Enter your <strong>RapidAPI Key</strong> to enable Instagram scraping on localhost.
-              You can subscribe to Instagram Scraper API on RapidAPI (free plans available) and paste your key below.
+              You can subscribe on RapidAPI and paste your key below.
             </p>
 
             <form onSubmit={handleSaveApiKey} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  X-RapidAPI-Key
+                  API Provider (from RapidAPI)
+                </label>
+                <select
+                  value={tempApiHost}
+                  onChange={e => setTempApiHost(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-black focus:bg-white text-gray-800"
+                >
+                  <option value="instagram-scraper-stable-api.p.rapidapi.com">
+                    Instagram Scraper Stable API (by RockSolid APIs) ⭐ Recommended
+                  </option>
+                  <option value="instagram-scraper-api2.p.rapidapi.com">
+                    Instagram Scraper API2
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  X-RapidAPI-Key *
                 </label>
                 <input
                   type="password"

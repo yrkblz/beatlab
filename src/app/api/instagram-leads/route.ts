@@ -188,6 +188,7 @@ export async function POST(request: Request) {
       onlyWithContact = false,
       keepUncategorized = false,
       apiKey: clientApiKey,
+      apiHost: clientApiHost,
     } = body;
 
     if (!source || typeof source !== 'string' || !source.trim()) {
@@ -212,28 +213,55 @@ export async function POST(request: Request) {
       mode === 'comments' ? 'Комментарии' :
       mode === 'hashtag' ? 'Хэштег' : 'Подписчики';
 
-    // Call RapidAPI Instagram Scraper API
-    // We use the standard rapidapi host 'instagram-scraper-api2.p.rapidapi.com'
-    const rapidApiHost = process.env.RAPIDAPI_HOST || 'instagram-scraper-api2.p.rapidapi.com';
+    // Support both Instagram Scraper Stable API (RockSolid APIs) and Instagram Scraper API2
+    const rapidApiHost = clientApiHost || process.env.RAPIDAPI_HOST || 'instagram-scraper-stable-api.p.rapidapi.com';
 
-    let endpointUrl = '';
-    if (mode === 'followers') {
-      endpointUrl = `https://${rapidApiHost}/v1/followers?username_or_id_or_url=${encodeURIComponent(targetUsername)}&amount=${parsedLimit}`;
-    } else if (mode === 'following') {
-      endpointUrl = `https://${rapidApiHost}/v1/following?username_or_id_or_url=${encodeURIComponent(targetUsername)}&amount=${parsedLimit}`;
-    } else if (mode === 'comments') {
-      endpointUrl = `https://${rapidApiHost}/v1/comments?code_or_id_or_url=${encodeURIComponent(source)}&amount=${parsedLimit}`;
+    let rapidRes: Response;
+    if (rapidApiHost.includes('stable') || rapidApiHost.includes('rocksolid')) {
+      const formBody = new URLSearchParams();
+      formBody.append('username_or_url', targetUsername);
+      formBody.append('amount', String(parsedLimit));
+
+      if (mode === 'following') {
+        formBody.append('data', 'following');
+      } else if (mode === 'comments') {
+        formBody.append('data', 'comments');
+      } else if (mode === 'hashtag') {
+        formBody.append('data', 'hashtag');
+        formBody.append('hashtag', targetUsername);
+      } else {
+        formBody.append('data', 'followers');
+      }
+
+      rapidRes = await fetch(`https://${rapidApiHost}/`, {
+        method: 'POST',
+        headers: {
+          'x-rapidapi-key': apiKey,
+          'x-rapidapi-host': rapidApiHost,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formBody.toString(),
+      });
     } else {
-      endpointUrl = `https://${rapidApiHost}/v1/hashtag?hashtag=${encodeURIComponent(targetUsername)}&amount=${parsedLimit}`;
-    }
+      let endpointUrl = '';
+      if (mode === 'followers') {
+        endpointUrl = `https://${rapidApiHost}/v1/followers?username_or_id_or_url=${encodeURIComponent(targetUsername)}&amount=${parsedLimit}`;
+      } else if (mode === 'following') {
+        endpointUrl = `https://${rapidApiHost}/v1/following?username_or_id_or_url=${encodeURIComponent(targetUsername)}&amount=${parsedLimit}`;
+      } else if (mode === 'comments') {
+        endpointUrl = `https://${rapidApiHost}/v1/comments?code_or_id_or_url=${encodeURIComponent(source)}&amount=${parsedLimit}`;
+      } else {
+        endpointUrl = `https://${rapidApiHost}/v1/hashtag?hashtag=${encodeURIComponent(targetUsername)}&amount=${parsedLimit}`;
+      }
 
-    const rapidRes = await fetch(endpointUrl, {
-      method: 'GET',
-      headers: {
-        'x-rapidapi-key': apiKey,
-        'x-rapidapi-host': rapidApiHost,
-      },
-    });
+      rapidRes = await fetch(endpointUrl, {
+        method: 'GET',
+        headers: {
+          'x-rapidapi-key': apiKey,
+          'x-rapidapi-host': rapidApiHost,
+        },
+      });
+    }
 
     const rapidData = await rapidRes.json();
 
@@ -250,6 +278,8 @@ export async function POST(request: Request) {
       rawItems = rapidData.data;
     } else if (Array.isArray(rapidData?.items)) {
       rawItems = rapidData.items;
+    } else if (Array.isArray(rapidData?.users)) {
+      rawItems = rapidData.users;
     } else if (Array.isArray(rapidData)) {
       rawItems = rapidData;
     }
