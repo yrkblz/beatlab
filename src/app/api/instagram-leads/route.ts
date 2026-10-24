@@ -305,12 +305,12 @@ export async function POST(request: Request) {
     const leads: InstagramLeadItem[] = [];
 
     for (const item of rawItems) {
-      const username = item.username || item.user?.username || item.owner?.username;
+      const username = item.username || item.user?.username || item.owner?.username || item.node?.username || item.node?.user?.username;
       if (!username) continue;
 
-      const fullName = item.full_name || item.user?.full_name || item.name || '';
-      const bio = item.biography || item.user?.biography || item.bio || item.text || '';
-      const followers = Number(item.follower_count || item.user?.follower_count || item.followers || 0);
+      const fullName = item.full_name || item.user?.full_name || item.node?.full_name || item.name || '';
+      const bio = item.biography || item.user?.biography || item.node?.biography || item.bio || item.text || '';
+      const followers = Number(item.follower_count || item.user?.follower_count || item.followers || item.edge_followed_by?.count || 0);
 
       // Extract emails and public links
       const email = item.public_email || item.user?.public_email || extractEmail(bio);
