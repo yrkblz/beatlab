@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { LayoutDashboard, Music2, CircleDollarSign, Mail, Search, Sparkles, CheckCircle, Video, FileText, Kanban, Share2, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Music2, CircleDollarSign, Mail, Search, Sparkles, CheckCircle, Video, FileText, Kanban, Share2, Menu, X, AtSign } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -236,6 +236,7 @@ export default function Sidebar() {
         <p className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Outreach</p>
       </div>
       <NavItem href="/leads" icon={<Search size={20} />} label="Lead Finder" onClick={onItemClick} />
+      <NavItem href="/instagram-leads" icon={<AtSign size={20} />} label="Instagram Scraper" onClick={onItemClick} />
       <NavItem href="/mailer" icon={<Mail size={20} />} label="Mail Tracker" onClick={onItemClick} />
       <NavItem href="/validator" icon={<CheckCircle size={20} />} label="Email Validator" onClick={onItemClick} />
 

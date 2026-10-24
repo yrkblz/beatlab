@@ -88,6 +88,7 @@ describe('Sidebar component', () => {
     expect(screen.getByText('BEATLAB')).toBeInTheDocument();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.getByText('Finance')).toBeInTheDocument();
+    expect(screen.getByText('Instagram Scraper')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Plan & Billing/i })).not.toBeInTheDocument();
   });
 
