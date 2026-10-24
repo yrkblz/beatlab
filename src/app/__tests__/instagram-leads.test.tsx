@@ -2,7 +2,6 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import InstagramLeadsPage, {
   IG_HISTORY_STORAGE_KEY,
-  RAPIDAPI_KEY_STORAGE_KEY,
 } from '../instagram-leads/page';
 import { supabase } from '@/lib/supabase';
 import { exportLeadsToExcel, exportLeadsToCsv } from '@/lib/instagram-export';
@@ -140,29 +139,9 @@ describe('InstagramLeadsPage (/instagram-leads)', () => {
     expect(screen.getByRole('button', { name: /^Following$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Comments on Post$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Hashtag Search$/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Configure RapidAPI/i })).toBeInTheDocument();
   });
 
-  it('opens API key modal when clicking Configure RapidAPI button and persists key in localStorage', async () => {
-    await act(async () => {
-      render(<InstagramLeadsPage />);
-    });
-
-    const apiKeyBtn = screen.getByRole('button', { name: /Configure RapidAPI/i });
-    fireEvent.click(apiKeyBtn);
-
-    expect(screen.getByText(/RapidAPI Configuration/i)).toBeInTheDocument();
-    const keyInput = screen.getByPlaceholderText(/Paste your RapidAPI key here\.\.\./i);
-
-    fireEvent.change(keyInput, { target: { value: 'test-rapidapi-key-123' } });
-    const saveBtn = screen.getByRole('button', { name: /Save API Key/i });
-    fireEvent.click(saveBtn);
-
-    expect(localStorage.getItem(RAPIDAPI_KEY_STORAGE_KEY)).toBe('test-rapidapi-key-123');
-    expect(screen.queryByText(/RapidAPI Configuration/i)).not.toBeInTheDocument();
-  });
-
-  it('handles MISSING_API_KEY error from API and prompts API key modal', async () => {
+  it('handles API errors gracefully and displays error banner', async () => {
     await act(async () => {
       render(<InstagramLeadsPage />);
     });
@@ -175,7 +154,7 @@ describe('InstagramLeadsPage (/instagram-leads)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/RapidAPI Configuration/i)).toBeInTheDocument();
+      expect(screen.getByText(/RapidAPI Key is required to fetch Instagram profiles/i)).toBeInTheDocument();
     });
   });
 

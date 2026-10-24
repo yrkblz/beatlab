@@ -12,7 +12,6 @@ import {
   ExternalLink,
   SlidersHorizontal,
   Sparkles,
-  Key,
   Trash2,
   History,
   AlertCircle,
@@ -30,8 +29,6 @@ import { InstagramLeadItem } from '@/app/api/instagram-leads/route';
 import { exportLeadsToExcel, exportLeadsToCsv } from '@/lib/instagram-export';
 
 export const IG_HISTORY_STORAGE_KEY = 'beatlab_instagram_leads_history';
-export const RAPIDAPI_KEY_STORAGE_KEY = 'beatlab_rapidapi_key';
-export const RAPIDAPI_HOST_STORAGE_KEY = 'beatlab_rapidapi_host';
 
 export default function InstagramLeadsPage() {
   // Input & Collection parameters
@@ -47,13 +44,6 @@ export default function InstagramLeadsPage() {
   const [keepUncategorized, setKeepUncategorized] = useState<boolean>(false);
   const [onlyUnique, setOnlyUnique] = useState<boolean>(true);
 
-  // API Key Settings Modal
-  const [apiKey, setApiKey] = useState('');
-  const [apiHost, setApiHost] = useState('instagram-scraper-stable-api.p.rapidapi.com');
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
-  const [tempApiKey, setTempApiKey] = useState('');
-  const [tempApiHost, setTempApiHost] = useState('instagram-scraper-stable-api.p.rapidapi.com');
-
   // Results & UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -65,7 +55,7 @@ export default function InstagramLeadsPage() {
   const [crmLoadingHandle, setCrmLoadingHandle] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // Load history, user & stored API key on mount
+  // Load history & user on mount
   useEffect(() => {
     try {
       const storedHistory = localStorage.getItem(IG_HISTORY_STORAGE_KEY);
@@ -75,18 +65,6 @@ export default function InstagramLeadsPage() {
           setHistory(parsed);
           setPriorHistory(parsed);
         }
-      }
-
-      const storedKey = localStorage.getItem(RAPIDAPI_KEY_STORAGE_KEY);
-      if (storedKey) {
-        setApiKey(storedKey);
-        setTempApiKey(storedKey);
-      }
-
-      const storedHost = localStorage.getItem(RAPIDAPI_HOST_STORAGE_KEY);
-      if (storedHost) {
-        setApiHost(storedHost);
-        setTempApiHost(storedHost);
       }
     } catch (e) {
       console.error('Error loading localStorage:', e);
@@ -133,17 +111,12 @@ export default function InstagramLeadsPage() {
           roleFilters,
           onlyWithContact,
           keepUncategorized,
-          apiKey: apiKey.trim() || undefined,
-          apiHost: apiHost.trim() || undefined,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        if (data.code === 'MISSING_API_KEY') {
-          setIsApiKeyModalOpen(true);
-        }
         throw new Error(data.error || 'Failed to scan Instagram profiles.');
       }
 
@@ -164,18 +137,6 @@ export default function InstagramLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  // Save API key & host
-  function handleSaveApiKey(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmedKey = tempApiKey.trim();
-    const trimmedHost = tempApiHost.trim();
-    setApiKey(trimmedKey);
-    setApiHost(trimmedHost);
-    localStorage.setItem(RAPIDAPI_KEY_STORAGE_KEY, trimmedKey);
-    localStorage.setItem(RAPIDAPI_HOST_STORAGE_KEY, trimmedHost);
-    setIsApiKeyModalOpen(false);
   }
 
   // Add Lead to Placement CRM
@@ -265,17 +226,6 @@ export default function InstagramLeadsPage() {
           <p className="text-gray-500 text-sm mt-1">
             Scrape, categorize, and pitch active rappers, singers, and producers from Instagram.
           </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-stretch sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setIsApiKeyModalOpen(true)}
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 shadow-xs transition-colors cursor-pointer"
-          >
-            <Key size={14} className={apiKey ? 'text-emerald-600' : 'text-amber-500'} />
-            <span>{apiKey ? 'RapidAPI Configured' : 'Configure RapidAPI'}</span>
-          </button>
         </div>
       </div>
 
@@ -532,15 +482,6 @@ export default function InstagramLeadsPage() {
             <div>
               <p className="font-semibold text-xs uppercase tracking-wider mb-0.5">Scraper Notice</p>
               <p>{error}</p>
-              {!apiKey && (
-                <button
-                  type="button"
-                  onClick={() => setIsApiKeyModalOpen(true)}
-                  className="mt-2 text-xs font-bold text-red-800 underline hover:no-underline"
-                >
-                  Configure your RapidAPI key now &rarr;
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -790,82 +731,6 @@ export default function InstagramLeadsPage() {
                 })}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
-
-      {/* RapidAPI Key Modal */}
-      {isApiKeyModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white border border-gray-200 rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4 animate-in zoom-in-95">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
-                <Key size={18} className="text-blue-600" />
-                <span>RapidAPI Configuration</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsApiKeyModalOpen(false)}
-                className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-black cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <p className="text-xs text-gray-600 leading-relaxed">
-              Enter your <strong>RapidAPI Key</strong> to enable Instagram scraping on localhost.
-              You can subscribe on RapidAPI and paste your key below.
-            </p>
-
-            <form onSubmit={handleSaveApiKey} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  API Provider (from RapidAPI)
-                </label>
-                <select
-                  value={tempApiHost}
-                  onChange={e => setTempApiHost(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-black focus:bg-white text-gray-800"
-                >
-                  <option value="instagram-scraper-stable-api.p.rapidapi.com">
-                    Instagram Scraper Stable API (by RockSolid APIs) ⭐ Recommended
-                  </option>
-                  <option value="instagram-scraper-api2.p.rapidapi.com">
-                    Instagram Scraper API2
-                  </option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  X-RapidAPI-Key *
-                </label>
-                <input
-                  type="password"
-                  value={tempApiKey}
-                  onChange={e => setTempApiKey(e.target.value)}
-                  placeholder="Paste your RapidAPI key here..."
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-black focus:bg-white font-mono"
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsApiKeyModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-black hover:bg-gray-800 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
-                >
-                  Save API Key
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
