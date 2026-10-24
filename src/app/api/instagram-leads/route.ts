@@ -222,18 +222,16 @@ export async function POST(request: Request) {
       formBody.append('username_or_url', targetUsername);
       formBody.append('amount', String(parsedLimit));
 
+      let endpointPath = '/get_ig_user_followers_v2.php';
       if (mode === 'following') {
-        formBody.append('data', 'following');
+        endpointPath = '/get_ig_user_followers.php';
       } else if (mode === 'comments') {
-        formBody.append('data', 'comments');
+        endpointPath = '/get_ig_user_posts.php';
       } else if (mode === 'hashtag') {
-        formBody.append('data', 'hashtag');
-        formBody.append('hashtag', targetUsername);
-      } else {
-        formBody.append('data', 'followers');
+        endpointPath = '/get_ig_user_followers_v2.php';
       }
 
-      rapidRes = await fetch(`https://${rapidApiHost}/`, {
+      rapidRes = await fetch(`https://${rapidApiHost}${endpointPath}`, {
         method: 'POST',
         headers: {
           'x-rapidapi-key': apiKey,
@@ -266,8 +264,18 @@ export async function POST(request: Request) {
     const rapidData = await rapidRes.json();
 
     if (!rapidRes.ok) {
+      if (rapidRes.status === 429) {
+        return NextResponse.json({
+          error: 'Wyczerpano darmowy miesięczny limit zapytań (20 requestów w planie Basic). Aby zbierać więcej profili, zwiększ plan na RapidAPI (np. Pro $28.99 = 50 000 requestów) lub użyj innego darmowego konta.',
+          code: 'RATE_LIMIT_EXCEEDED'
+        }, { status: 429 });
+      }
       const errorMsg = rapidData?.message || rapidData?.error || `RapidAPI error status ${rapidRes.status}`;
       return NextResponse.json({ error: errorMsg }, { status: rapidRes.status });
+    }
+
+    if (rapidData?.error) {
+      return NextResponse.json({ error: rapidData.error }, { status: 400 });
     }
 
     // Extract profiles list from response structure
@@ -280,6 +288,8 @@ export async function POST(request: Request) {
       rawItems = rapidData.items;
     } else if (Array.isArray(rapidData?.users)) {
       rawItems = rapidData.users;
+    } else if (Array.isArray(rapidData?.followers)) {
+      rawItems = rapidData.followers;
     } else if (Array.isArray(rapidData)) {
       rawItems = rapidData;
     }
