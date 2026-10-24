@@ -214,7 +214,7 @@ export async function POST(request: Request) {
       mode === 'hashtag' ? 'Хэштег' : 'Подписчики';
 
     // Support both Instagram Scraper Stable API (RockSolid APIs) and Instagram Scraper API2
-    const rapidApiHost = clientApiHost || process.env.RAPIDAPI_HOST || 'instagram-scraper-stable-api.p.rapidapi.com';
+    const rapidApiHost = clientApiHost || process.env.INSTAGRAM_RAPIDAPI_HOST || 'instagram-scraper-stable-api.p.rapidapi.com';
 
     let rapidRes: Response;
     if (rapidApiHost.includes('stable') || rapidApiHost.includes('rocksolid')) {
