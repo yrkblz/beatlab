@@ -24,6 +24,7 @@ const mockSales = [
     beat_name: 'Dark Drill Anthem',
     client_name: 'Central Cee',
     amount: 149.99,
+    currency: 'USD',
     license_type: 'Unlimited Lease',
     created_at: '2026-03-15T12:00:00Z',
     user_id: 'usr-123',
@@ -33,6 +34,7 @@ const mockSales = [
     beat_name: 'Summer Afrobeat',
     client_name: 'Burna Boy',
     amount: 49.99,
+    currency: 'PLN',
     license_type: 'WAV Lease',
     created_at: '2026-03-10T12:00:00Z',
     user_id: 'usr-123',
@@ -482,55 +484,37 @@ describe('LicensesPage (/licenses)', () => {
     expect(screen.getByText(/License Generator Settings/i)).toBeInTheDocument();
   });
 
-  it('toggles producer settings accordion expand and collapse', async () => {
+  it('switches to From Sale mode and autofills contract and currency from selected sale', async () => {
     await act(async () => {
       render(<LicensesPage />);
     });
 
-    const accordionBtn = screen.getByRole('button', { name: /Ustawienia Domyślne Producenta/i });
-    expect(accordionBtn).toBeInTheDocument();
-
-    // Initially closed, shows Rozwiń
-    expect(screen.getByText('Rozwiń')).toBeInTheDocument();
-
-    // Click to expand
-    fireEvent.click(accordionBtn);
-    expect(screen.getByText('Zwiń')).toBeInTheDocument();
-
-    // Click to collapse
-    fireEvent.click(accordionBtn);
-    expect(screen.getByText('Rozwiń')).toBeInTheDocument();
-  });
-
-  it('switches to Ze Sprzedaży mode and autofills contract from selected sale', async () => {
-    await act(async () => {
-      render(<LicensesPage />);
-    });
-
-    // Switch to Sale mode
-    const saleModeBtn = screen.getByRole('button', { name: /Ze Sprzedaży \(Sale\)/i });
+    // Switch to From Sale mode
+    const saleModeBtn = screen.getByRole('button', { name: /From Sale/i });
     fireEvent.click(saleModeBtn);
 
     // Verify sales list from Finance is rendered
     await waitFor(() => {
       expect(screen.getAllByText('Dark Drill Anthem').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText(/Klient: Central Cee/i)).toBeInTheDocument();
+      expect(screen.getByText(/Buyer: Central Cee/i)).toBeInTheDocument();
       expect(screen.getAllByText('Summer Afrobeat').length).toBeGreaterThanOrEqual(1);
     });
 
-    // Click on the second sale: Summer Afrobeat (WAV Lease, $49.99, Burna Boy)
+    // Click on the second sale: Summer Afrobeat (WAV Lease, 49.99 PLN, Burna Boy)
     const secondSaleBtn = screen.getAllByText('Summer Afrobeat')[0];
     fireEvent.click(secondSaleBtn);
 
-    // Verify fields were autofilled
+    // Verify fields were autofilled including PLN currency
     await waitFor(() => {
       expect(screen.getAllByText('Summer Afrobeat').length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByDisplayValue('Burna Boy').length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByDisplayValue('49.99').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByDisplayValue('PLN (zł)')).toBeInTheDocument();
     });
 
-    // Verify contract preview contains the buyer and beat name
+    // Verify contract preview contains the buyer, beat name, and Polish Zloty currency
     expect(screen.getAllByText('Burna Boy').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Summer Afrobeat').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Polish Zloty \(PLN\)/i).length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -9,6 +9,26 @@ const Highlight = ({ children }: { children: React.ReactNode }) => (
   <span className="text-blue-600 font-bold">{children}</span>
 );
 
+function getCurrencySymbol(curr?: string): string {
+  const c = (curr || 'USD').toUpperCase();
+  if (c === 'EUR') return '€';
+  if (c === 'GBP') return '£';
+  if (c === 'PLN') return 'zł';
+  if (c === 'UAH') return '₴';
+  if (c === 'RUB') return '₽';
+  return '$';
+}
+
+function getCurrencyFullName(curr?: string): string {
+  const c = (curr || 'USD').toUpperCase();
+  if (c === 'EUR') return 'Euros';
+  if (c === 'GBP') return 'British Pounds';
+  if (c === 'PLN') return 'Polish Zloty';
+  if (c === 'UAH') return 'Ukrainian Hryvnia';
+  if (c === 'RUB') return 'Russian Rubles';
+  return 'US Dollars';
+}
+
 export default function LicensesPage() {
   const [beats, setBeats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +62,7 @@ export default function LicensesPage() {
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
   const [salesSearchQuery, setSalesSearchQuery] = useState('');
   const [agreementDate, setAgreementDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [currency, setCurrency] = useState<string>('USD');
 
   // Form State
   const [mobileTab, setMobileTab] = useState<'form' | 'preview'>('form');
@@ -157,6 +178,9 @@ export default function LicensesPage() {
     if (sale.amount !== undefined && sale.amount !== null) {
       setCustomPrice(sale.amount.toString());
     }
+    if (sale.currency) {
+      setCurrency(sale.currency.toUpperCase());
+    }
     if (sale.created_at) {
       try {
         setAgreementDate(new Date(sale.created_at).toISOString().slice(0, 10));
@@ -259,6 +283,9 @@ export default function LicensesPage() {
   const addr = producerAddress || '[Address]';
   const beatTitle = customBeatName || selectedBeat?.title || '[BeatName]';
   const price = customPrice || '0.00';
+  const currencySymbol = getCurrencySymbol(currency);
+  const currencyName = getCurrencyFullName(currency);
+  const formattedContractPrice = `${currencySymbol}${price} ${currencyName} (${currency})`;
   const licensorUpper = licensor.toUpperCase();
   const parsedPublishing = Math.min(100, Math.max(0, Number(producerPublishing || 0)));
 
@@ -293,119 +320,39 @@ export default function LicensesPage() {
             <h2 className="text-xl font-bold mb-6">License Generator Settings</h2>
           
           <div className="space-y-5">
-            {/* Producer Global Settings (Collapsible Accordion) */}
-            <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setIsProducerSettingsOpen(!isProducerSettingsOpen)}
-                className="w-full flex items-center justify-between p-3.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <Sliders size={16} className="text-gray-600" />
-                  <div>
-                    <h3 className="text-xs font-bold text-gray-900">Ustawienia Domyślne Producenta</h3>
-                    <p className="text-[10px] text-gray-500">Imię i nazwisko, adres, domyślne stawki licencji</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-gray-500">
-                    {isProducerSettingsOpen ? 'Zwiń' : 'Rozwiń'}
-                  </span>
-                  <ChevronDown
-                    size={15}
-                    className={`text-gray-500 transition-transform duration-200 ${
-                      isProducerSettingsOpen ? 'rotate-180' : ''
-                    }`}
-                  />
-                </div>
-              </button>
-
-              <div className={`p-4 space-y-4 border-t border-gray-200 ${isProducerSettingsOpen ? 'block' : 'hidden'}`}>
-                {/* Producer Global Settings */}
-                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
-                  <h4 className="text-xs font-bold text-gray-800">Your Producer Details (From Settings)</h4>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Full Legal Name (Licensor)</label>
-                    <input 
-                      type="text" 
-                      value={producerFullName} 
-                      onChange={e => setProducerFullName(e.target.value)}
-                      placeholder="e.g. John Doe"
-                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-black"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Stage Name</label>
-                    <input 
-                      type="text" 
-                      value={stageName} 
-                      onChange={e => setStageName(e.target.value)}
-                      placeholder="e.g. DJ Khaleed"
-                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-black"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">Address</label>
-                    <textarea 
-                      value={producerAddress} 
-                      onChange={e => setProducerAddress(e.target.value)}
-                      placeholder="123 Music Lane..."
-                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-black"
-                      rows={2}
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
-                  <h4 className="text-xs font-bold text-gray-800">Default Prices</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">MP3 Price</label>
-                      <input type="number" value={mp3Price} onChange={e => setMp3Price(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">WAV Price</label>
-                      <input type="number" value={wavPrice} onChange={e => setWavPrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Trackout Price</label>
-                      <input type="number" value={trackoutPrice} onChange={e => setTrackoutPrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Unlimited Price</label>
-                      <input type="number" value={unlimitedPrice} onChange={e => setUnlimitedPrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Exclusive Price</label>
-                      <input type="number" value={exclusivePrice} onChange={e => setExclusivePrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
-                  <h4 className="text-xs font-bold text-gray-800">Default Stream Limits</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">MP3 Stream Limit</label>
-                      <input type="number" value={mp3StreamLimit} onChange={e => setMp3StreamLimit(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">WAV Stream Limit</label>
-                      <input type="number" value={wavStreamLimit} onChange={e => setWavStreamLimit(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Trackout Stream Limit</label>
-                      <input type="number" value={trackoutStreamLimit} onChange={e => setTrackoutStreamLimit(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {/* Hidden producer defaults inputs kept in DOM for profile & state synchronization */}
+            <div className="hidden" aria-hidden="true">
+              <input 
+                type="text" 
+                value={producerFullName} 
+                onChange={e => setProducerFullName(e.target.value)}
+                placeholder="Full Legal Name"
+              />
+              <input 
+                type="text" 
+                value={stageName} 
+                onChange={e => setStageName(e.target.value)}
+                placeholder="Stage Name"
+              />
+              <textarea 
+                value={producerAddress} 
+                onChange={e => setProducerAddress(e.target.value)}
+                placeholder="Address"
+              />
+              <input type="number" value={mp3Price} onChange={e => setMp3Price(e.target.value)} />
+              <input type="number" value={wavPrice} onChange={e => setWavPrice(e.target.value)} />
+              <input type="number" value={trackoutPrice} onChange={e => setTrackoutPrice(e.target.value)} />
+              <input type="number" value={unlimitedPrice} onChange={e => setUnlimitedPrice(e.target.value)} />
+              <input type="number" value={exclusivePrice} onChange={e => setExclusivePrice(e.target.value)} />
+              <input type="number" value={mp3StreamLimit} onChange={e => setMp3StreamLimit(e.target.value)} />
+              <input type="number" value={wavStreamLimit} onChange={e => setWavStreamLimit(e.target.value)} />
+              <input type="number" value={trackoutStreamLimit} onChange={e => setTrackoutStreamLimit(e.target.value)} />
             </div>
 
             {/* Document Specific Info Header with Mode Selector */}
             <div className="pt-1">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <h3 className="text-sm font-bold text-gray-800">Szczegóły Umowy</h3>
+                <h3 className="text-sm font-bold text-gray-800">License Agreement Details</h3>
                 
                 {/* Source Switcher */}
                 <div className="flex items-center p-1 bg-gray-100 rounded-xl border border-gray-200">
@@ -421,7 +368,7 @@ export default function LicensesPage() {
                         : 'text-gray-500 hover:text-black'
                     }`}
                   >
-                    Własna (Custom)
+                    Custom
                   </button>
                   <button
                     type="button"
@@ -438,7 +385,7 @@ export default function LicensesPage() {
                     }`}
                   >
                     <ShoppingBag size={12} className={licenseSource === 'sale' ? 'text-blue-600' : 'text-gray-400'} />
-                    Ze Sprzedaży (Sale)
+                    From Sale
                   </button>
                 </div>
               </div>
@@ -449,18 +396,18 @@ export default function LicensesPage() {
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
                       <ShoppingBag size={14} className="text-blue-600" />
-                      Wybierz transakcję z Finansów:
+                      Select a sale from Finances:
                     </label>
                     <span className="text-[11px] font-semibold text-blue-700">
-                      Transakcje: {salesList.length}
+                      Sales recorded: {salesList.length}
                     </span>
                   </div>
 
                   {loadingSales ? (
-                    <div className="p-3 text-xs text-blue-600 text-center font-medium">Ładowanie historii sprzedaży...</div>
+                    <div className="p-3 text-xs text-blue-600 text-center font-medium">Loading sales history...</div>
                   ) : salesList.length === 0 ? (
                     <div className="p-3 text-xs text-gray-500 bg-white rounded-lg border border-gray-200 text-center">
-                      Brak zarejestrowanych transakcji w Finansach. Dodaj sprzedaż w module Finanse lub użyj trybu „Własna”.
+                      No sales recorded in Finances yet. Record a sale in Finances or use Custom mode.
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -468,7 +415,7 @@ export default function LicensesPage() {
                         <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
                         <input
                           type="text"
-                          placeholder="Szukaj po tytule bitu lub kliencie..."
+                          placeholder="Search by beat title or buyer name..."
                           value={salesSearchQuery}
                           onChange={(e) => setSalesSearchQuery(e.target.value)}
                           className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
@@ -478,6 +425,8 @@ export default function LicensesPage() {
                       <div className="max-h-48 overflow-y-auto space-y-1.5 pr-0.5">
                         {filteredSales.map((sale) => {
                           const isSelected = selectedSaleId === sale.id;
+                          const saleCurrency = sale.currency ? sale.currency.toUpperCase() : 'USD';
+                          const saleSymbol = getCurrencySymbol(saleCurrency);
                           return (
                             <button
                               key={sale.id}
@@ -491,15 +440,15 @@ export default function LicensesPage() {
                             >
                               <div className="truncate flex-1">
                                 <span className="font-bold block truncate">
-                                  {sale.beat_name || 'Bez tytułu'}
+                                  {sale.beat_name || 'Untitled Beat'}
                                 </span>
                                 <span className={`text-[11px] block truncate ${isSelected ? 'text-blue-100' : 'text-gray-500'}`}>
-                                  {sale.client_name ? `Klient: ${sale.client_name}` : 'Brak klienta'} • {sale.license_type || 'Licencja'}
+                                  {sale.client_name ? `Buyer: ${sale.client_name}` : 'No buyer'} • {sale.license_type || 'License'}
                                 </span>
                               </div>
                               <div className="text-right shrink-0">
                                 <span className="font-extrabold block text-sm">
-                                  ${sale.amount}
+                                  {saleSymbol}{sale.amount}
                                 </span>
                                 <span className={`text-[10px] block ${isSelected ? 'text-blue-100' : 'text-gray-400'}`}>
                                   {sale.created_at ? new Date(sale.created_at).toLocaleDateString() : ''}
@@ -569,20 +518,43 @@ export default function LicensesPage() {
                       />
                       <span className="text-sm font-medium text-gray-900">{type.name}</span>
                     </div>
-                    <span className="text-sm font-semibold text-gray-700">${type.defaultPrice}</span>
+                    <span className="text-sm font-semibold text-gray-700">{currencySymbol}{type.defaultPrice}</span>
                   </label>
                 ))}
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">License Price ($) *</label>
-              <input 
-                type="number" 
-                value={customPrice} 
-                onChange={e => setCustomPrice(e.target.value)}
-                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-gray-700">License Price ({currency}) *</label>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-gray-500 font-medium">Currency:</span>
+                  <select
+                    aria-label="Currency"
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="bg-gray-50 border border-gray-200 rounded text-xs px-2 py-0.5 font-semibold text-gray-700 focus:outline-none focus:border-black cursor-pointer"
+                  >
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="PLN">PLN (zł)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="UAH">UAH (₴)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-2 text-sm font-semibold text-gray-400">
+                  {currencySymbol}
+                </span>
+                <input 
+                  type="number" 
+                  value={customPrice} 
+                  onChange={e => setCustomPrice(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-black font-semibold"
+                  step="any"
+                />
+              </div>
             </div>
 
             <div>
@@ -653,7 +625,7 @@ export default function LicensesPage() {
                   <strong>Master Use.</strong> The Licensor hereby grants to Licensee an exclusive license (this "License") to record vocal synchronization to the Composition partly or in its entirety and substantially in its original form ("Master Recording").
                 </p>
                 <p>
-                  <strong>Mechanical Rights.</strong> The Licensor hereby grants to Licensee an exclusive license to use Master Recording in the reproduction, duplication, manufacture, and distribution of phonograph records, cassette tapes, compact disk, digital downloads, other miscellaneous audio and digital recordings, and any lifts and versions thereof (collectively, the "Recordings", and individually, a "Recordings") worldwide for unlimited copies of such Recordings or any combination of such Recordings, condition upon the payment to the Licensor a sum of <Highlight>${price} US Dollars</Highlight>, receipt of which is confirmed.
+                  <strong>Mechanical Rights.</strong> The Licensor hereby grants to Licensee an exclusive license to use Master Recording in the reproduction, duplication, manufacture, and distribution of phonograph records, cassette tapes, compact disk, digital downloads, other miscellaneous audio and digital recordings, and any lifts and versions thereof (collectively, the "Recordings", and individually, a "Recordings") worldwide for unlimited copies of such Recordings or any combination of such Recordings, condition upon the payment to the Licensor a sum of <Highlight>{formattedContractPrice}</Highlight>, receipt of which is confirmed.
                 </p>
                 <p>
                   <strong>Performance Rights.</strong> The Licensor here by grants to Licensee an exclusive license to use the Master Recording in unlimited for-profit performances, shows, or concerts.
@@ -696,7 +668,7 @@ export default function LicensesPage() {
                   <strong>Master Use.</strong> The Licensor hereby grants to Licensee a non-exclusive license (this "License") to record vocal synchronization to the Composition partly or in its entirety and substantially in its original form ("Master Recording").
                 </p>
                 <p>
-                  <strong>Mechanical Rights.</strong> The Licensor hereby grants to Licensee a non-exclusive license to use Master Recording in the reproduction, duplication, manufacture, and distribution of phonograph records, cassette tapes, compact disk, digital downloads, other miscellaneous audio and digital recordings, and any lifts and versions thereof (collectively, the "Recordings", and individually, a "Recordings") worldwide for up to the pressing or selling a total of <Highlight>{currentStreamLimit}</Highlight> copies of such Recordings or any combination of such Recordings, condition upon the payment to the Licensor a sum of <Highlight>${price} US Dollars</Highlight>, receipt of which is confirmed.
+                  <strong>Mechanical Rights.</strong> The Licensor hereby grants to Licensee a non-exclusive license to use Master Recording in the reproduction, duplication, manufacture, and distribution of phonograph records, cassette tapes, compact disk, digital downloads, other miscellaneous audio and digital recordings, and any lifts and versions thereof (collectively, the "Recordings", and individually, a "Recordings") worldwide for up to the pressing or selling a total of <Highlight>{currentStreamLimit}</Highlight> copies of such Recordings or any combination of such Recordings, condition upon the payment to the Licensor a sum of <Highlight>{formattedContractPrice}</Highlight>, receipt of which is confirmed.
                 </p>
                 <p>
                   <strong>License Upgrade.</strong> Upon reaching the limit of <Highlight>{currentStreamLimit}</Highlight> copies or streams as specified in the Mechanical Rights section, the Licensee is required to upgrade this license to an Exclusive Rights Agreement or negotiate a new agreement that includes a 33% publishing split in favor of the Licensor.
