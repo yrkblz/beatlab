@@ -672,24 +672,7 @@ export default function MailerPage() {
                   </div>
                 )}
 
-                {status && (
-                  <div className={`p-4 rounded-lg text-sm font-medium border ${status.toLowerCase().includes('error') || status.toLowerCase().includes('failed') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <span className="break-words">{status}</span>
-                      {(status.toLowerCase().includes('token') || status.toLowerCase().includes('sesja') || status.toLowerCase().includes('session') || status.toLowerCase().includes('uprawnień') || status.toLowerCase().includes('reconnect')) && (
-                        <button
-                          type="button"
-                          onClick={reconnectGoogleDrive}
-                          className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-md shadow-sm transition-colors flex items-center justify-center gap-1.5"
-                        >
-                          <RefreshCw size={13} />
-                          Połącz ponownie konto Google
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
+                
                 {/* Schedule Send Option */}
                 <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
                   <div className="flex items-center justify-between">
