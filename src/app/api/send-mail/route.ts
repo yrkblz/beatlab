@@ -1,16 +1,23 @@
 import { NextResponse } from 'next/server';
 
-function createMimeMessage(to: string, subject: string, html: string) {
-  const message = [
+function createMimeMessage(to: string, senderEmail: string, subject: string, html: string) {
+  const headers = [
     `To: ${to}`,
-    `Subject: =?utf-8?B?${Buffer.from(subject).toString('base64')}?=`,
-    `MIME-Version: 1.0`,
-    `Content-Type: text/html; charset=utf-8`,
+    senderEmail ? `From: ${senderEmail}` : '',
+    `Subject: =?utf-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
     '',
-    html
-  ].join('\r\n');
-  
-  return Buffer.from(message).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    Buffer.from(html, 'utf-8').toString('base64'),
+  ].filter(Boolean);
+
+  const rawMime = headers.join('\r\n');
+  return Buffer.from(rawMime, 'utf-8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 export async function POST(request: Request) {
@@ -21,7 +28,7 @@ export async function POST(request: Request) {
     const origin = `${protocol}://${host}`;
 
     if (!accessToken) {
-      return NextResponse.json({ error: 'Missing Google access token.' }, { status: 401 });
+      return NextResponse.json({ error: 'Missing Google access token. Please reconnect your Google account.' }, { status: 401 });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -35,7 +42,7 @@ export async function POST(request: Request) {
 
     // 1. Save Campaign in Supabase (scoped to userId for user isolation)
     const campaignBody: Record<string, any> = {
-      subject: campaignName,
+      subject: campaignName || subject || 'Campaign',
       total_sent: emails.length,
     };
     if (userId) {
@@ -64,7 +71,7 @@ export async function POST(request: Request) {
           'Content-Type': 'application/json',
           'Prefer': 'return=representation'
         },
-        body: JSON.stringify({ subject: campaignName, total_sent: emails.length })
+        body: JSON.stringify({ subject: campaignName || subject || 'Campaign', total_sent: emails.length })
       });
       campaignData = await campaignRes.json();
     }
@@ -106,6 +113,8 @@ export async function POST(request: Request) {
     }
 
     // 2. Dispatch emails and record tracking logs for each
+    const isHttpsPublicOrigin = origin.startsWith('https://') && !origin.includes('localhost');
+
     for (const email of emails) {
       const logRes = await fetch(`${supabaseUrl}/rest/v1/email_logs`, {
         method: 'POST',
@@ -118,23 +127,24 @@ export async function POST(request: Request) {
         body: JSON.stringify({ campaign_id: campaignId, recipient_email: email })
       });
       const logData = await logRes.json();
-      const logId = logData[0].id;
+      const logId = logData?.[0]?.id;
 
-      // Tracking pixel (hidden 1x1 image at the end of the email)
-      const trackingPixelUrl = `${origin}/api/track?log_id=${logId}`;
+      // Tracking pixel: only use on secure public domains so local test servers don't trigger spam filters
+      const trackingPixelHtml = (isHttpsPublicOrigin && logId)
+        ? `<br/><br/><img src="${origin}/api/track?log_id=${logId}" width="1" height="1" alt="" style="display:none; border:none; outline:none;" />`
+        : '';
       
       const htmlMessage = `
         <div style="font-family: Arial, sans-serif; color: #111; line-height: 1.6;">
           ${message.replace(/\n/g, '<br/>')}
           ${attachmentsHtml}
-          <br/><br/>
-          <img src="${trackingPixelUrl}" width="1" height="1" alt="" style="display:none; border:none; outline:none;" />
+          ${trackingPixelHtml}
         </div>
       `;
 
-      const rawMessage = createMimeMessage(email, subject, htmlMessage);
+      const rawMessage = createMimeMessage(email, senderEmail, subject, htmlMessage);
 
-      await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      const gmailRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -142,6 +152,29 @@ export async function POST(request: Request) {
         },
         body: JSON.stringify({ raw: rawMessage })
       });
+
+      if (!gmailRes.ok) {
+        const errorText = await gmailRes.text().catch(() => '');
+        let parsedError = errorText;
+        try {
+          const errJson = JSON.parse(errorText);
+          parsedError = errJson?.error?.message || errorText;
+        } catch {}
+        console.error(`[Mailer API] Gmail send failed (${gmailRes.status}) for ${email}:`, parsedError);
+
+        let userFriendlyMsg = `Gmail API (${gmailRes.status}): ${parsedError}`;
+        if (gmailRes.status === 401) {
+          userFriendlyMsg = 'Twoja sesja Google (token) wygasła. W zakładce Mailer kliknij "Reconnect Google Account", aby odnowić uprawnienia Gmail.';
+        } else if (gmailRes.status === 403 && (parsedError.toLowerCase().includes('has not been used in project') || parsedError.toLowerCase().includes('disabled'))) {
+          userFriendlyMsg = 'Gmail API nie jest włączone w Twoim projekcie Google Cloud. Wejdź w Google Cloud Console -> APIs & Services -> Włącz bibliotekę "Gmail API".';
+        } else if (gmailRes.status === 403 && parsedError.toLowerCase().includes('insufficient')) {
+          userFriendlyMsg = 'Brak uprawnień do wysyłania (scope gmail.send). Kliknij "Reconnect Google Account" i zaznacz wszystkie zgody Google.';
+        } else if (gmailRes.status === 429 || parsedError.toLowerCase().includes('quota') || parsedError.toLowerCase().includes('rate limit')) {
+          userFriendlyMsg = 'Przekroczono limit wysyłki konta Gmail (Gmail daily quota). Spróbuj ponownie za kilka godzin.';
+        }
+
+        throw new Error(userFriendlyMsg);
+      }
     }
 
     return NextResponse.json({ success: true, campaignId });

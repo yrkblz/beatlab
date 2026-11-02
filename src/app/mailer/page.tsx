@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Mail, Send, Users, LogIn, LogOut, Music2, HardDrive, Paperclip, CheckCircle2, BarChart3, Eye, Calendar, Folder, ArrowLeft, Trash2, CheckSquare, Clock, AlertCircle } from 'lucide-react';
+import { Mail, Send, Users, LogIn, LogOut, Music2, HardDrive, Paperclip, CheckCircle2, BarChart3, Eye, Calendar, Folder, ArrowLeft, Trash2, CheckSquare, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 
@@ -673,8 +673,20 @@ export default function MailerPage() {
                 )}
 
                 {status && (
-                  <div className={`p-4 rounded-lg text-sm font-medium border ${status.includes('Error') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                    {status}
+                  <div className={`p-4 rounded-lg text-sm font-medium border ${status.toLowerCase().includes('error') || status.toLowerCase().includes('failed') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <span className="break-words">{status}</span>
+                      {(status.toLowerCase().includes('token') || status.toLowerCase().includes('sesja') || status.toLowerCase().includes('session') || status.toLowerCase().includes('uprawnień') || status.toLowerCase().includes('reconnect')) && (
+                        <button
+                          type="button"
+                          onClick={reconnectGoogleDrive}
+                          className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-md shadow-sm transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          <RefreshCw size={13} />
+                          Połącz ponownie konto Google
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -769,8 +781,20 @@ export default function MailerPage() {
                 </div>
 
                 {status && (
-                  <div className={`p-4 rounded-lg text-sm font-medium border ${status.includes('Error') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                    {status}
+                  <div className={`p-4 rounded-lg text-sm font-medium border ${status.toLowerCase().includes('error') || status.toLowerCase().includes('failed') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <span className="break-words">{status}</span>
+                      {(status.toLowerCase().includes('token') || status.toLowerCase().includes('sesja') || status.toLowerCase().includes('session') || status.toLowerCase().includes('uprawnień') || status.toLowerCase().includes('reconnect')) && (
+                        <button
+                          type="button"
+                          onClick={reconnectGoogleDrive}
+                          className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-md shadow-sm transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          <RefreshCw size={13} />
+                          Połącz ponownie konto Google
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
