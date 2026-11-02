@@ -1,9 +1,24 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { Printer, Search, X, Check, ChevronDown, Sliders, ShoppingBag, Calendar, FileText } from 'lucide-react';
+import { Printer, Search, X, Check, ChevronDown, Sliders, ShoppingBag, Calendar, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  format,
+  parseISO,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  addDays,
+  isSameMonth,
+  isSameDay,
+  addMonths,
+  subMonths,
+  isToday,
+  isValid
+} from 'date-fns';
 
 const Highlight = ({ children }: { children: React.ReactNode }) => (
   <span className="text-blue-600 font-bold">{children}</span>
@@ -27,6 +42,283 @@ function getCurrencyFullName(curr?: string): string {
   if (c === 'UAH') return 'Ukrainian Hryvnia';
   if (c === 'RUB') return 'Russian Rubles';
   return 'US Dollars';
+}
+
+function calculatePriceInCurrency(
+  baseUsdPrice: string | number,
+  targetCurrency: string,
+  exchangeRates: Record<string, number>
+): string {
+  const num = typeof baseUsdPrice === 'string' ? parseFloat(baseUsdPrice) : baseUsdPrice;
+  if (isNaN(num) || num <= 0) return '0';
+  if (targetCurrency === 'USD') return num.toString();
+
+  const rate = exchangeRates[targetCurrency] || 1;
+  const converted = Math.round(num * rate);
+  return converted.toString();
+}
+
+const CURRENCY_OPTIONS = [
+  { code: 'USD', symbol: '$', label: 'USD ($)' },
+  { code: 'EUR', symbol: '€', label: 'EUR (€)' },
+  { code: 'PLN', symbol: 'zł', label: 'PLN (zł)' },
+  { code: 'GBP', symbol: '£', label: 'GBP (£)' },
+  { code: 'UAH', symbol: '₴', label: 'UAH (₴)' },
+];
+
+function CustomCurrencyDropdown({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (code: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selected = CURRENCY_OPTIONS.find((c) => c.code === value) || CURRENCY_OPTIONS[0];
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        aria-label="Currency"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-gray-800 transition-colors shadow-2xs focus:outline-none focus:border-black cursor-pointer"
+      >
+        <span className="text-gray-500 font-bold">{selected.symbol}</span>
+        <span>{selected.code}</span>
+        <ChevronDown size={13} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {/* Hidden select for standard form/test accessibility */}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+      >
+        {CURRENCY_OPTIONS.map((c) => (
+          <option key={c.code} value={c.code}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+
+      {isOpen && (
+        <div className="absolute right-0 z-50 mt-1 w-36 bg-white border border-gray-200 rounded-xl shadow-xl py-1 animate-in fade-in zoom-in-95 duration-100">
+          {CURRENCY_OPTIONS.map((c) => {
+            const isSelected = c.code === value;
+            return (
+              <button
+                key={c.code}
+                type="button"
+                onClick={() => {
+                  onChange(c.code);
+                  setIsOpen(false);
+                }}
+                className={`w-full px-3 py-1.5 text-xs text-left flex items-center justify-between transition-colors cursor-pointer ${
+                  isSelected ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-4 text-center font-bold text-gray-500">{c.symbol}</span>
+                  <span>{c.code}</span>
+                </div>
+                {isSelected && <Check size={13} className="text-blue-600 shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomDatePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const parsedSelected = value ? parseISO(value) : new Date();
+  const validSelected = isValid(parsedSelected) ? parsedSelected : new Date();
+
+  const [viewDate, setViewDate] = useState<Date>(validSelected);
+
+  useEffect(() => {
+    if (value) {
+      const d = parseISO(value);
+      if (isValid(d)) {
+        setViewDate(d);
+      }
+    }
+  }, [value]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const monthStart = startOfMonth(viewDate);
+  const monthEnd = endOfMonth(monthStart);
+  const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
+  const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
+
+  const days: Date[] = [];
+  let day = startDate;
+  while (day <= endDate) {
+    days.push(day);
+    day = addDays(day, 1);
+  }
+
+  const weekdays = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+
+  const handleSelectDate = (d: Date) => {
+    const formatted = format(d, 'yyyy-MM-dd');
+    onChange(formatted);
+    setIsOpen(false);
+  };
+
+  const handleSetToday = () => {
+    const today = new Date();
+    onChange(format(today, 'yyyy-MM-dd'));
+    setViewDate(today);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        aria-label="Agreement Date"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 hover:border-gray-400 focus:outline-none focus:border-black transition-colors cursor-pointer"
+      >
+        <div className="flex items-center gap-2">
+          <Calendar size={15} className="text-gray-500" />
+          <span className="font-medium text-gray-900">
+            {value ? format(validSelected, 'MMMM d, yyyy') : 'Select date...'}
+          </span>
+        </div>
+        <span className="text-[11px] text-gray-400 font-mono">
+          {value || ''}
+        </span>
+      </button>
+
+      {/* Hidden input for form/test accessibility */}
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+
+      {isOpen && (
+        <div className="absolute left-0 z-50 mt-1 w-72 bg-white border border-gray-200 rounded-xl shadow-xl p-3 animate-in fade-in zoom-in-95 duration-100">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => setViewDate(subMonths(viewDate, 1))}
+              className="p-1 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors cursor-pointer"
+              aria-label="Previous month"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-xs font-bold text-gray-900">
+              {format(viewDate, 'MMMM yyyy')}
+            </span>
+            <button
+              type="button"
+              onClick={() => setViewDate(addMonths(viewDate, 1))}
+              className="p-1 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors cursor-pointer"
+              aria-label="Next month"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {/* Weekday labels */}
+          <div className="grid grid-cols-7 gap-1 text-center mb-1">
+            {weekdays.map((wd) => (
+              <span key={wd} className="text-[10px] font-semibold text-gray-400">
+                {wd}
+              </span>
+            ))}
+          </div>
+
+          {/* Days grid */}
+          <div className="grid grid-cols-7 gap-1 text-center">
+            {days.map((d, idx) => {
+              const isSelected = value ? isSameDay(d, validSelected) : false;
+              const isCurrentMonth = isSameMonth(d, monthStart);
+              const isTodayDate = isToday(d);
+
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSelectDate(d)}
+                  className={`h-7 w-7 text-xs mx-auto rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                    !isCurrentMonth
+                      ? 'text-gray-300 hover:text-gray-500'
+                      : isSelected
+                      ? 'bg-black text-white font-bold shadow-xs'
+                      : isTodayDate
+                      ? 'border border-blue-500 text-blue-600 font-bold hover:bg-blue-50'
+                      : 'text-gray-700 hover:bg-gray-100 font-medium'
+                  }`}
+                >
+                  {format(d, 'd')}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={handleSetToday}
+              className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function LicensesPage() {
@@ -63,6 +355,30 @@ export default function LicensesPage() {
   const [salesSearchQuery, setSalesSearchQuery] = useState('');
   const [agreementDate, setAgreementDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [currency, setCurrency] = useState<string>('USD');
+  const [rates, setRates] = useState<Record<string, number>>({
+    USD: 1,
+    EUR: 0.92,
+    PLN: 4.02,
+    GBP: 0.78,
+    UAH: 41.5,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    if (typeof fetch !== 'undefined') {
+      fetch('https://api.exchangerate-api.com/v4/latest/USD')
+        .then(res => res.json())
+        .then(data => {
+          if (isMounted && data && data.rates) {
+            setRates(prev => ({ ...prev, ...data.rates }));
+          }
+        })
+        .catch(() => {
+          // Fallback rates already defined
+        });
+    }
+    return () => { isMounted = false; };
+  }, []);
 
   // Form State
   const [mobileTab, setMobileTab] = useState<'form' | 'preview'>('form');
@@ -215,17 +531,62 @@ export default function LicensesPage() {
   }, [fetchBeats, fetchProfile]);
 
   const LICENSE_TYPES = [
-    { id: 'mp3', name: 'MP3 Lease', defaultPrice: mp3Price, isExclusive: false, features: 'MP3 file, Non-Exclusive rights, Limited streams/copies.' },
-    { id: 'wav', name: 'WAV Lease', defaultPrice: wavPrice, isExclusive: false, features: 'WAV file, Non-Exclusive rights, Limited streams/copies.' },
-    { id: 'trackout', name: 'Trackout Lease', defaultPrice: trackoutPrice, isExclusive: false, features: 'WAV + Trackouts, Non-Exclusive rights, Limited streams/copies.' },
-    { id: 'unlimited', name: 'Unlimited Lease', defaultPrice: unlimitedPrice, isExclusive: false, features: 'All Files, Non-Exclusive rights, Unlimited streams.' },
-    { id: 'exclusive', name: 'Exclusive Rights', defaultPrice: exclusivePrice, isExclusive: true, features: 'All Files, Exclusive rights, 100% Publishing.' },
+    {
+      id: 'mp3',
+      name: 'MP3 Lease',
+      basePrice: mp3Price,
+      defaultPrice: calculatePriceInCurrency(mp3Price, currency, rates),
+      isExclusive: false,
+      features: 'MP3 file, Non-Exclusive rights, Limited streams/copies.'
+    },
+    {
+      id: 'wav',
+      name: 'WAV Lease',
+      basePrice: wavPrice,
+      defaultPrice: calculatePriceInCurrency(wavPrice, currency, rates),
+      isExclusive: false,
+      features: 'WAV file, Non-Exclusive rights, Limited streams/copies.'
+    },
+    {
+      id: 'trackout',
+      name: 'Trackout Lease',
+      basePrice: trackoutPrice,
+      defaultPrice: calculatePriceInCurrency(trackoutPrice, currency, rates),
+      isExclusive: false,
+      features: 'WAV + Trackouts, Non-Exclusive rights, Limited streams/copies.'
+    },
+    {
+      id: 'unlimited',
+      name: 'Unlimited Lease',
+      basePrice: unlimitedPrice,
+      defaultPrice: calculatePriceInCurrency(unlimitedPrice, currency, rates),
+      isExclusive: false,
+      features: 'All Files, Non-Exclusive rights, Unlimited streams.'
+    },
+    {
+      id: 'exclusive',
+      name: 'Exclusive Rights',
+      basePrice: exclusivePrice,
+      defaultPrice: calculatePriceInCurrency(exclusivePrice, currency, rates),
+      isExclusive: true,
+      features: 'All Files, Exclusive rights, 100% Publishing.'
+    },
   ];
 
-  // Auto-update price when license type changes
+  const handleCurrencyChange = (newCurrency: string) => {
+    setCurrency(newCurrency);
+    if (licenseSource === 'custom') {
+      const selected = LICENSE_TYPES.find((t) => t.id === selectedLicenseType);
+      if (selected) {
+        setCustomPrice(calculatePriceInCurrency(selected.basePrice, newCurrency, rates));
+      }
+    }
+  };
+
+  // Auto-update price when license type changes in custom mode
   useEffect(() => {
-    if (isLoaded) {
-      const selected = LICENSE_TYPES.find(t => t.id === selectedLicenseType);
+    if (isLoaded && licenseSource === 'custom') {
+      const selected = LICENSE_TYPES.find((t) => t.id === selectedLicenseType);
       if (selected) {
         setCustomPrice(selected.defaultPrice);
       }
@@ -233,8 +594,9 @@ export default function LicensesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLicenseType, isLoaded]);
 
-  const selectedBeat = beats.find(b => b.id === selectedBeatId);
-  const currentLicense = LICENSE_TYPES.find(t => t.id === selectedLicenseType) || LICENSE_TYPES[0];
+  const selectedSale = salesList.find((s) => s.id === selectedSaleId);
+  const selectedBeat = beats.find((b) => b.id === selectedBeatId);
+  const currentLicense = LICENSE_TYPES.find((t) => t.id === selectedLicenseType) || LICENSE_TYPES[0];
 
   const handlePrint = () => {
     window.print();
@@ -463,108 +825,143 @@ export default function LicensesPage() {
                 </div>
               )}
             </div>
-            
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Select Beat *</label>
-              <button 
-                type="button"
-                onClick={() => setIsBeatModalOpen(true)}
-                className="w-full flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black hover:bg-gray-50"
-              >
-                <span className="truncate pr-2">
-                  {customBeatName || selectedBeat?.title || 'Select a beat...'}
-                </span>
-                <ChevronDown size={16} className="text-gray-400 shrink-0" />
-              </button>
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Buyer Name (Licensee) *</label>
-              <input 
-                type="text" 
-                value={buyerName} 
-                onChange={e => setBuyerName(e.target.value)}
-                placeholder="e.g. Drake"
-                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-2">License Type *</label>
-              <div className="grid grid-cols-1 gap-2">
-                {LICENSE_TYPES.map(type => (
-                  <label
-                    key={type.id}
-                    className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
-                      selectedLicenseType === type.id 
-                        ? 'border-black bg-gray-50 shadow-sm' 
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="radio"
-                        name="licenseType"
-                        value={type.id}
-                        checked={selectedLicenseType === type.id}
-                        onChange={e => {
-                          setSelectedLicenseType(e.target.value);
-                          const selected = LICENSE_TYPES.find(t => t.id === e.target.value);
-                          if (selected) {
-                            setCustomPrice(selected.defaultPrice);
-                          }
-                        }}
-                        className="w-4 h-4 text-black focus:ring-black border-gray-300"
-                      />
-                      <span className="text-sm font-medium text-gray-900">{type.name}</span>
+            {/* In 'sale' mode: Show Selected Sale Overview card and keep inputs hidden */}
+            {licenseSource === 'sale' && (
+              <>
+                {selectedSale && (
+                  <div className="bg-gradient-to-br from-blue-50/90 to-indigo-50/50 border border-blue-200/90 rounded-xl p-3.5 space-y-2 mb-2 shadow-2xs animate-in fade-in">
+                    <div className="flex items-center justify-between text-xs font-semibold text-blue-900">
+                      <span className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[11px] text-blue-700">
+                        <Check size={13} className="text-blue-600 stroke-[3]" />
+                        Selected Transaction
+                      </span>
+                      <span className="bg-white px-2 py-0.5 rounded-md border border-blue-200 font-extrabold text-blue-950 text-xs shadow-2xs">
+                        {currencySymbol}{price} {currency}
+                      </span>
                     </div>
-                    <span className="text-sm font-semibold text-gray-700">{currencySymbol}{type.defaultPrice}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-gray-700">License Price ({currency}) *</label>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-gray-500 font-medium">Currency:</span>
-                  <select
-                    aria-label="Currency"
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                    className="bg-gray-50 border border-gray-200 rounded text-xs px-2 py-0.5 font-semibold text-gray-700 focus:outline-none focus:border-black cursor-pointer"
-                  >
-                    <option value="USD">USD ($)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="PLN">PLN (zł)</option>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="UAH">UAH (₴)</option>
+                    <div className="pt-0.5">
+                      <p className="text-sm font-bold text-gray-950 truncate">
+                        {customBeatName || selectedBeat?.title || 'Untitled Beat'}
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+                        <span>Buyer: <strong className="text-gray-900">{buyerName || 'No buyer'}</strong></span>
+                        <span>•</span>
+                        <span className="bg-blue-100/80 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          {currentLicense.name}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Form state fields synced for tests and contract generation */}
+                <div className="hidden" aria-hidden="true">
+                  <input type="text" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} readOnly />
+                  <input type="text" value={customBeatName} onChange={(e) => setCustomBeatName(e.target.value)} readOnly />
+                  <input type="number" value={customPrice} onChange={(e) => setCustomPrice(e.target.value)} readOnly />
+                  <select value={currency} onChange={(e) => handleCurrencyChange(e.target.value)}>
+                    {CURRENCY_OPTIONS.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-2 text-sm font-semibold text-gray-400">
-                  {currencySymbol}
-                </span>
-                <input 
-                  type="number" 
-                  value={customPrice} 
-                  onChange={e => setCustomPrice(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-black font-semibold"
-                  step="any"
-                />
-              </div>
-            </div>
+              </>
+            )}
+
+            {/* In 'custom' mode: Show full manual customization inputs */}
+            {licenseSource === 'custom' && (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Select Beat *</label>
+                  <button 
+                    type="button"
+                    onClick={() => setIsBeatModalOpen(true)}
+                    className="w-full flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black hover:bg-gray-50 cursor-pointer"
+                  >
+                    <span className="truncate pr-2">
+                      {customBeatName || selectedBeat?.title || 'Select a beat...'}
+                    </span>
+                    <ChevronDown size={16} className="text-gray-400 shrink-0" />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Buyer Name (Licensee) *</label>
+                  <input 
+                    type="text" 
+                    value={buyerName} 
+                    onChange={e => setBuyerName(e.target.value)}
+                    placeholder="e.g. Drake"
+                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-2">License Type *</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {LICENSE_TYPES.map(type => (
+                      <label
+                        key={type.id}
+                        className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
+                          selectedLicenseType === type.id 
+                            ? 'border-black bg-gray-50 shadow-sm' 
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <input
+                            type="radio"
+                            name="licenseType"
+                            value={type.id}
+                            checked={selectedLicenseType === type.id}
+                            onChange={e => {
+                              setSelectedLicenseType(e.target.value);
+                              const selected = LICENSE_TYPES.find(t => t.id === e.target.value);
+                              if (selected) {
+                                setCustomPrice(selected.defaultPrice);
+                              }
+                            }}
+                            className="w-4 h-4 text-black focus:ring-black border-gray-300"
+                          />
+                          <span className="text-sm font-medium text-gray-900">{type.name}</span>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-700">{currencySymbol}{type.defaultPrice}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-gray-700">License Price ({currency}) *</label>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-gray-500 font-medium">Currency:</span>
+                      <CustomCurrencyDropdown value={currency} onChange={handleCurrencyChange} />
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-sm font-semibold text-gray-400">
+                      {currencySymbol}
+                    </span>
+                    <input 
+                      type="number" 
+                      value={customPrice} 
+                      onChange={e => setCustomPrice(e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:border-black font-semibold"
+                      step="any"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Agreement Date</label>
-              <input 
-                type="date" 
-                value={agreementDate} 
-                onChange={e => setAgreementDate(e.target.value)}
-                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black font-sans"
-              />
+              <CustomDatePicker value={agreementDate} onChange={setAgreementDate} />
             </div>
 
             <div>

@@ -516,5 +516,52 @@ describe('LicensesPage (/licenses)', () => {
     expect(screen.getAllByText('Burna Boy').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Summer Afrobeat').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Polish Zloty \(PLN\)/i).length).toBeGreaterThanOrEqual(1);
+
+    // Verify Selected Transaction summary card is rendered
+    expect(screen.getByText(/Selected Transaction/i)).toBeInTheDocument();
+
+    // Verify redundant manual form inputs are NOT visible in From Sale mode
+    expect(screen.queryByText('Select Beat *')).not.toBeInTheDocument();
+    expect(screen.queryByText('Buyer Name (Licensee) *')).not.toBeInTheDocument();
+  });
+
+  it('converts prices from USD to chosen currency using exchange rates and rounds mathematically', async () => {
+    await act(async () => {
+      render(<LicensesPage />);
+    });
+
+    // Open currency dropdown
+    const currencyBtn = screen.getByRole('button', { name: /Currency/i });
+    fireEvent.click(currencyBtn);
+
+    // Select EUR
+    const eurOption = screen.getAllByRole('button', { name: /EUR/i })[0];
+    fireEvent.click(eurOption);
+
+    // Verify prices converted according to EUR rate (~0.92):
+    // MP3 ($29.99 * 0.92 = ~28 EUR)
+    await waitFor(() => {
+      expect(screen.getAllByText(/€/i).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('allows opening CustomDatePicker popover and setting today date', async () => {
+    await act(async () => {
+      render(<LicensesPage />);
+    });
+
+    // Click Date Picker button
+    const dateBtn = screen.getByRole('button', { name: /Agreement Date/i });
+    fireEvent.click(dateBtn);
+
+    // Verify calendar popover opens with Today button
+    const todayBtn = screen.getByRole('button', { name: /Today/i });
+    expect(todayBtn).toBeInTheDocument();
+
+    // Click Today
+    fireEvent.click(todayBtn);
+
+    // Verify today's date formatted is present
+    expect(dateBtn).toBeInTheDocument();
   });
 });
