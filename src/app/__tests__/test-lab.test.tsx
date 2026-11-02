@@ -9,30 +9,12 @@ describe('TestLabPage (/test)', () => {
     global.fetch = jest.fn();
   });
 
-  it('renders the core modules: Pobieranie Artystów and Unfollow Tracker', () => {
+  it('renders the core module: Pobieranie Oznaczonych Raperów z Postów i Rolek', () => {
     render(<TestLabPage />);
 
     expect(screen.getByText(/Test Lab & Outreach/i)).toBeInTheDocument();
-    expect(screen.getByText(/1\. Oznaczeni Raperzy/i)).toBeInTheDocument();
-    expect(screen.getByText(/2\. Unfollow Tracker/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Wysyłanie DM/i)).not.toBeInTheDocument();
-  });
-
-  it('switches between tabs cleanly', () => {
-    render(<TestLabPage />);
-
-    // Switch to Unfollow tab
-    const unfollowTabBtn = screen.getByRole('button', { name: /2\. Unfollow Tracker/i });
-    fireEvent.click(unfollowTabBtn);
-
-    expect(screen.getByText(/Import z Instagrama \(JSON\)/i)).toBeInTheDocument();
-
-    // Switch to Live API scan mode
-    const liveScanBtn = screen.getByRole('button', { name: /Skan na żywo \(API\)/i });
-    fireEvent.click(liveScanBtn);
-
-    expect(screen.getByPlaceholderText(/Wpisz swój Instagram handle/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Sprawdź odobserwowania/i })).toBeInTheDocument();
+    expect(screen.getByText(/Pobieranie Oznaczonych Raperów z Postów \/ Rolek/i)).toBeInTheDocument();
+    expect(screen.queryByText(/2\. Unfollow Tracker/i)).not.toBeInTheDocument();
   });
 
   it('fetches artists and displays their profile and chat links', async () => {

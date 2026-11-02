@@ -18,6 +18,27 @@ const mockBeats = [
   { id: 'b-3', title: 'Dark Drill', genre: 'Drill', bpm: 142, key: 'D Minor', created_at: '2026-03-01T10:00:00Z' },
 ];
 
+const mockSales = [
+  {
+    id: 'sale-101',
+    beat_name: 'Dark Drill Anthem',
+    client_name: 'Central Cee',
+    amount: 149.99,
+    license_type: 'Unlimited Lease',
+    created_at: '2026-03-15T12:00:00Z',
+    user_id: 'usr-123',
+  },
+  {
+    id: 'sale-102',
+    beat_name: 'Summer Afrobeat',
+    client_name: 'Burna Boy',
+    amount: 49.99,
+    license_type: 'WAV Lease',
+    created_at: '2026-03-10T12:00:00Z',
+    user_id: 'usr-123',
+  },
+];
+
 const mockProfile = {
   id: 'usr-123',
   full_name: 'Metro Boomin',
@@ -46,6 +67,15 @@ jest.mock('@/lib/supabase', () => ({
           select: jest.fn(() => ({
             eq: jest.fn(() => ({
               order: jest.fn().mockResolvedValue({ data: mockBeats, error: null }),
+            })),
+          })),
+        };
+      }
+      if (table === 'sales') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              order: jest.fn().mockResolvedValue({ data: mockSales, error: null }),
             })),
           })),
         };
@@ -450,5 +480,57 @@ describe('LicensesPage (/licenses)', () => {
     const backBtn = screen.getByRole('button', { name: /Back to Configuration/i });
     fireEvent.click(backBtn);
     expect(screen.getByText(/License Generator Settings/i)).toBeInTheDocument();
+  });
+
+  it('toggles producer settings accordion expand and collapse', async () => {
+    await act(async () => {
+      render(<LicensesPage />);
+    });
+
+    const accordionBtn = screen.getByRole('button', { name: /Ustawienia Domyślne Producenta/i });
+    expect(accordionBtn).toBeInTheDocument();
+
+    // Initially closed, shows Rozwiń
+    expect(screen.getByText('Rozwiń')).toBeInTheDocument();
+
+    // Click to expand
+    fireEvent.click(accordionBtn);
+    expect(screen.getByText('Zwiń')).toBeInTheDocument();
+
+    // Click to collapse
+    fireEvent.click(accordionBtn);
+    expect(screen.getByText('Rozwiń')).toBeInTheDocument();
+  });
+
+  it('switches to Ze Sprzedaży mode and autofills contract from selected sale', async () => {
+    await act(async () => {
+      render(<LicensesPage />);
+    });
+
+    // Switch to Sale mode
+    const saleModeBtn = screen.getByRole('button', { name: /Ze Sprzedaży \(Sale\)/i });
+    fireEvent.click(saleModeBtn);
+
+    // Verify sales list from Finance is rendered
+    await waitFor(() => {
+      expect(screen.getAllByText('Dark Drill Anthem').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/Klient: Central Cee/i)).toBeInTheDocument();
+      expect(screen.getAllByText('Summer Afrobeat').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Click on the second sale: Summer Afrobeat (WAV Lease, $49.99, Burna Boy)
+    const secondSaleBtn = screen.getAllByText('Summer Afrobeat')[0];
+    fireEvent.click(secondSaleBtn);
+
+    // Verify fields were autofilled
+    await waitFor(() => {
+      expect(screen.getAllByText('Summer Afrobeat').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByDisplayValue('Burna Boy').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByDisplayValue('49.99').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Verify contract preview contains the buyer and beat name
+    expect(screen.getAllByText('Burna Boy').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Summer Afrobeat').length).toBeGreaterThanOrEqual(1);
   });
 });

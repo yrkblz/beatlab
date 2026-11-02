@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { Printer, Search, X, Check, ChevronDown } from 'lucide-react';
+import { Printer, Search, X, Check, ChevronDown, Sliders, ShoppingBag, Calendar, FileText } from 'lucide-react';
 
 const Highlight = ({ children }: { children: React.ReactNode }) => (
   <span className="text-blue-600 font-bold">{children}</span>
@@ -32,6 +32,16 @@ export default function LicensesPage() {
   const [trackoutStreamLimit, setTrackoutStreamLimit] = useState('1000000');
 
   const [producerPublishing, setProducerPublishing] = useState('0');
+
+  const [isProducerSettingsOpen, setIsProducerSettingsOpen] = useState(false);
+
+  // Sales Integration State
+  const [salesList, setSalesList] = useState<any[]>([]);
+  const [loadingSales, setLoadingSales] = useState(false);
+  const [licenseSource, setLicenseSource] = useState<'custom' | 'sale'>('custom');
+  const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
+  const [salesSearchQuery, setSalesSearchQuery] = useState('');
+  const [agreementDate, setAgreementDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
   // Form State
   const [mobileTab, setMobileTab] = useState<'form' | 'preview'>('form');
@@ -109,6 +119,51 @@ export default function LicensesPage() {
     setLoading(false);
   }, []);
 
+  const fetchSales = useCallback(async (userId: string) => {
+    setLoadingSales(true);
+    try {
+      let query: any = supabase
+        .from('sales')
+        .select('*')
+        .eq('user_id', userId);
+      if (query && typeof query.order === 'function') {
+        query = query.order('created_at', { ascending: false });
+      }
+      const { data } = await query;
+      setSalesList(data || []);
+    } catch (e) {
+      console.error('Error fetching sales:', e);
+    } finally {
+      setLoadingSales(false);
+    }
+  }, []);
+
+  function mapSaleLicenseTypeToId(licenseTypeStr?: string): string {
+    if (!licenseTypeStr) return 'mp3';
+    const l = licenseTypeStr.toLowerCase();
+    if (l.includes('exclusive')) return 'exclusive';
+    if (l.includes('unlimited')) return 'unlimited';
+    if (l.includes('trackout')) return 'trackout';
+    if (l.includes('wav')) return 'wav';
+    return 'mp3';
+  }
+
+  function handleSelectSale(sale: any) {
+    setSelectedSaleId(sale.id);
+    setCustomBeatName(sale.beat_name || '');
+    setBuyerName(sale.client_name || '');
+    const matchedType = mapSaleLicenseTypeToId(sale.license_type);
+    setSelectedLicenseType(matchedType);
+    if (sale.amount !== undefined && sale.amount !== null) {
+      setCustomPrice(sale.amount.toString());
+    }
+    if (sale.created_at) {
+      try {
+        setAgreementDate(new Date(sale.created_at).toISOString().slice(0, 10));
+      } catch {}
+    }
+  }
+
   const fetchProfile = useCallback(async (userId: string) => {
     const { data } = await supabase.from('profiles').select('full_name, stage_name, address').eq('id', userId).single();
     if (data) {
@@ -128,6 +183,7 @@ export default function LicensesPage() {
       if (user) {
         fetchBeats(user.id);
         fetchProfile(user.id);
+        fetchSales(user.id);
       } else {
         setLoading(false);
       }
@@ -160,6 +216,14 @@ export default function LicensesPage() {
     window.print();
   };
 
+  const filteredSales = salesList.filter((s) => {
+    const q = salesSearchQuery.toLowerCase();
+    const beatMatch = (s.beat_name || '').toLowerCase().includes(q);
+    const clientMatch = (s.client_name || '').toLowerCase().includes(q);
+    const typeMatch = (s.license_type || '').toLowerCase().includes(q);
+    return beatMatch || clientMatch || typeMatch;
+  });
+
   const sortedBeats = [...beats]
     .filter(b => (b.title || '').toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
@@ -188,7 +252,7 @@ export default function LicensesPage() {
     selectedLicenseType === 'wav' ? wavStreamLimit :
     selectedLicenseType === 'trackout' ? trackoutStreamLimit : 'Unlimited';
 
-  const dateStr = new Date().toLocaleDateString();
+  const dateStr = agreementDate ? new Date(agreementDate).toLocaleDateString() : new Date().toLocaleDateString();
   const licensor = producerFullName || '[Licensor]';
   const licensee = buyerName || '[Licensee]';
   const stage = stageName || '[StageName]';
@@ -229,89 +293,227 @@ export default function LicensesPage() {
             <h2 className="text-xl font-bold mb-6">License Generator Settings</h2>
           
           <div className="space-y-5">
-            {/* Producer Global Settings */}
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
-              <h3 className="text-sm font-bold text-gray-800">Your Producer Details (From Settings)</h3>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Full Legal Name (Licensor)</label>
-                <input 
-                  type="text" 
-                  value={producerFullName} 
-                  onChange={e => setProducerFullName(e.target.value)}
-                  placeholder="e.g. John Doe"
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Stage Name</label>
-                <input 
-                  type="text" 
-                  value={stageName} 
-                  onChange={e => setStageName(e.target.value)}
-                  placeholder="e.g. DJ Khaleed"
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Address</label>
-                <textarea 
-                  value={producerAddress} 
-                  onChange={e => setProducerAddress(e.target.value)}
-                  placeholder="123 Music Lane..."
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black"
-                  rows={2}
-                />
+            {/* Producer Global Settings (Collapsible Accordion) */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setIsProducerSettingsOpen(!isProducerSettingsOpen)}
+                className="w-full flex items-center justify-between p-3.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <Sliders size={16} className="text-gray-600" />
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-900">Ustawienia Domyślne Producenta</h3>
+                    <p className="text-[10px] text-gray-500">Imię i nazwisko, adres, domyślne stawki licencji</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-gray-500">
+                    {isProducerSettingsOpen ? 'Zwiń' : 'Rozwiń'}
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    className={`text-gray-500 transition-transform duration-200 ${
+                      isProducerSettingsOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </div>
+              </button>
+
+              <div className={`p-4 space-y-4 border-t border-gray-200 ${isProducerSettingsOpen ? 'block' : 'hidden'}`}>
+                {/* Producer Global Settings */}
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
+                  <h4 className="text-xs font-bold text-gray-800">Your Producer Details (From Settings)</h4>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Full Legal Name (Licensor)</label>
+                    <input 
+                      type="text" 
+                      value={producerFullName} 
+                      onChange={e => setProducerFullName(e.target.value)}
+                      placeholder="e.g. John Doe"
+                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-black"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Stage Name</label>
+                    <input 
+                      type="text" 
+                      value={stageName} 
+                      onChange={e => setStageName(e.target.value)}
+                      placeholder="e.g. DJ Khaleed"
+                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-black"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Address</label>
+                    <textarea 
+                      value={producerAddress} 
+                      onChange={e => setProducerAddress(e.target.value)}
+                      placeholder="123 Music Lane..."
+                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-black"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
+                  <h4 className="text-xs font-bold text-gray-800">Default Prices</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">MP3 Price</label>
+                      <input type="number" value={mp3Price} onChange={e => setMp3Price(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">WAV Price</label>
+                      <input type="number" value={wavPrice} onChange={e => setWavPrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Trackout Price</label>
+                      <input type="number" value={trackoutPrice} onChange={e => setTrackoutPrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Unlimited Price</label>
+                      <input type="number" value={unlimitedPrice} onChange={e => setUnlimitedPrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Exclusive Price</label>
+                      <input type="number" value={exclusivePrice} onChange={e => setExclusivePrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-3">
+                  <h4 className="text-xs font-bold text-gray-800">Default Stream Limits</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">MP3 Stream Limit</label>
+                      <input type="number" value={mp3StreamLimit} onChange={e => setMp3StreamLimit(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">WAV Stream Limit</label>
+                      <input type="number" value={wavStreamLimit} onChange={e => setWavStreamLimit(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-[11px] font-semibold text-gray-700 mb-0.5">Trackout Stream Limit</label>
+                      <input type="number" value={trackoutStreamLimit} onChange={e => setTrackoutStreamLimit(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white" />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
-              <h3 className="text-sm font-bold text-gray-800">Default Prices</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">MP3 Price</label>
-                  <input type="number" value={mp3Price} onChange={e => setMp3Price(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">WAV Price</label>
-                  <input type="number" value={wavPrice} onChange={e => setWavPrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Trackout Price</label>
-                  <input type="number" value={trackoutPrice} onChange={e => setTrackoutPrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Unlimited Price</label>
-                  <input type="number" value={unlimitedPrice} onChange={e => setUnlimitedPrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Exclusive Price</label>
-                  <input type="number" value={exclusivePrice} onChange={e => setExclusivePrice(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-4">
-              <h3 className="text-sm font-bold text-gray-800">Default Stream Limits</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">MP3 Stream Limit</label>
-                  <input type="number" value={mp3StreamLimit} onChange={e => setMp3StreamLimit(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">WAV Stream Limit</label>
-                  <input type="number" value={wavStreamLimit} onChange={e => setWavStreamLimit(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Trackout Stream Limit</label>
-                  <input type="number" value={trackoutStreamLimit} onChange={e => setTrackoutStreamLimit(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1 text-sm" />
+            {/* Document Specific Info Header with Mode Selector */}
+            <div className="pt-1">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <h3 className="text-sm font-bold text-gray-800">Szczegóły Umowy</h3>
+                
+                {/* Source Switcher */}
+                <div className="flex items-center p-1 bg-gray-100 rounded-xl border border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLicenseSource('custom');
+                      setSelectedSaleId(null);
+                    }}
+                    className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                      licenseSource === 'custom'
+                        ? 'bg-white text-black shadow-xs font-bold'
+                        : 'text-gray-500 hover:text-black'
+                    }`}
+                  >
+                    Własna (Custom)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLicenseSource('sale');
+                      if (salesList.length > 0 && !selectedSaleId) {
+                        handleSelectSale(salesList[0]);
+                      }
+                    }}
+                    className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+                      licenseSource === 'sale'
+                        ? 'bg-white text-blue-700 shadow-xs font-bold'
+                        : 'text-gray-500 hover:text-black'
+                    }`}
+                  >
+                    <ShoppingBag size={12} className={licenseSource === 'sale' ? 'text-blue-600' : 'text-gray-400'} />
+                    Ze Sprzedaży (Sale)
+                  </button>
                 </div>
               </div>
+
+              {/* SALE SELECTOR PANEL */}
+              {licenseSource === 'sale' && (
+                <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3.5 space-y-2.5 mb-4 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                      <ShoppingBag size={14} className="text-blue-600" />
+                      Wybierz transakcję z Finansów:
+                    </label>
+                    <span className="text-[11px] font-semibold text-blue-700">
+                      Transakcje: {salesList.length}
+                    </span>
+                  </div>
+
+                  {loadingSales ? (
+                    <div className="p-3 text-xs text-blue-600 text-center font-medium">Ładowanie historii sprzedaży...</div>
+                  ) : salesList.length === 0 ? (
+                    <div className="p-3 text-xs text-gray-500 bg-white rounded-lg border border-gray-200 text-center">
+                      Brak zarejestrowanych transakcji w Finansach. Dodaj sprzedaż w module Finanse lub użyj trybu „Własna”.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Szukaj po tytule bitu lub kliencie..."
+                          value={salesSearchQuery}
+                          onChange={(e) => setSalesSearchQuery(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 pr-0.5">
+                        {filteredSales.map((sale) => {
+                          const isSelected = selectedSaleId === sale.id;
+                          return (
+                            <button
+                              key={sale.id}
+                              type="button"
+                              onClick={() => handleSelectSale(sale)}
+                              className={`w-full text-left p-2.5 rounded-lg border transition-all text-xs flex items-center justify-between gap-2 ${
+                                isSelected
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                  : 'bg-white hover:bg-blue-50/50 border-gray-200 text-gray-800'
+                              }`}
+                            >
+                              <div className="truncate flex-1">
+                                <span className="font-bold block truncate">
+                                  {sale.beat_name || 'Bez tytułu'}
+                                </span>
+                                <span className={`text-[11px] block truncate ${isSelected ? 'text-blue-100' : 'text-gray-500'}`}>
+                                  {sale.client_name ? `Klient: ${sale.client_name}` : 'Brak klienta'} • {sale.license_type || 'Licencja'}
+                                </span>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="font-extrabold block text-sm">
+                                  ${sale.amount}
+                                </span>
+                                <span className={`text-[10px] block ${isSelected ? 'text-blue-100' : 'text-gray-400'}`}>
+                                  {sale.created_at ? new Date(sale.created_at).toLocaleDateString() : ''}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-
-            <hr className="border-gray-200" />
-
-            {/* Document Specific Info */}
-            <h3 className="text-sm font-bold text-gray-800">Current Agreement Info</h3>
             
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Select Beat *</label>
@@ -380,6 +582,16 @@ export default function LicensesPage() {
                 value={customPrice} 
                 onChange={e => setCustomPrice(e.target.value)}
                 className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Agreement Date</label>
+              <input 
+                type="date" 
+                value={agreementDate} 
+                onChange={e => setAgreementDate(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black font-sans"
               />
             </div>
 
