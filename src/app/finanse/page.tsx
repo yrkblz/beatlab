@@ -1,11 +1,34 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { DollarSign, Filter, TrendingUp, ChevronDown, Check } from 'lucide-react';
+import { 
+  DollarSign, 
+  Filter, 
+  TrendingUp, 
+  ChevronDown, 
+  Check, 
+  User as UserIcon, 
+  UserCheck, 
+  UserPlus, 
+  X, 
+  ExternalLink,
+  Users,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
+} from 'lucide-react';
 import { User } from '@supabase/supabase-js';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import {
+  ClientItem,
+  fetchClientsWithSales,
+  findOrCreateClientByName,
+  formatClientFullName,
+} from '@/lib/clients-storage';
 
 const LICENSES = ['MP3 Lease', 'WAV Lease', 'Trackout', 'Exclusive'];
 const CURRENCIES = ['USD', 'PLN', 'RUB', 'UAH', 'EUR'];
@@ -53,7 +76,10 @@ function CustomSelect({ options, value, onChange, placeholder }: { options: stri
   );
 }
 
-export default function FinansePage() {
+function FinanseContent() {
+  const searchParams = useSearchParams();
+  const prefillClient = searchParams?.get('client');
+
   const [sales, setSales] = useState<any[]>([]);
   const [saleToDelete, setSaleToDelete] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,13 +91,38 @@ export default function FinansePage() {
 
   const [beatName, setBeatName] = useState('');
   const [clientName, setClientName] = useState('');
+  const [selectedClient, setSelectedClient] = useState<ClientItem | null>(null);
+  const [clientsList, setClientsList] = useState<ClientItem[]>([]);
+  const [isClientMenuOpen, setIsClientMenuOpen] = useState(false);
+  const clientDropdownRef = useRef<HTMLDivElement>(null);
+
   const [licenseType, setLicenseType] = useState('MP3 Lease');
   const [amount, setAmount] = useState('35');
   const [currency, setCurrency] = useState('USD');
   const [displayCurrency, setDisplayCurrency] = useState('USD');
   const [timeFilter, setTimeFilter] = useState('This Year');
+  const [clientFilter, setClientFilter] = useState('All');
+  const [clientSort, setClientSort] = useState<'none' | 'asc' | 'desc'>('none');
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
+
+  // Close client dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(event.target as Node)) {
+        setIsClientMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Handle URL prefill client
+  useEffect(() => {
+    if (prefillClient) {
+      setClientName(prefillClient);
+    }
+  }, [prefillClient]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -80,6 +131,7 @@ export default function FinansePage() {
       if (user) {
         fetchData(user.id);
         fetchProfile(user.id);
+        fetchClients(user.id);
       } else {
         setLoading(false);
       }
@@ -109,6 +161,15 @@ export default function FinansePage() {
     setLoading(false);
   }
 
+  async function fetchClients(userId: string) {
+    try {
+      const data = await fetchClientsWithSales(userId);
+      setClientsList(data);
+    } catch (e) {
+      console.error("Error fetching clients list:", e);
+    }
+  }
+
   const licensePrices: Record<string, string> = {
     'MP3 Lease': '35',
     'WAV Lease': '45',
@@ -119,6 +180,101 @@ export default function FinansePage() {
   function handleLicenseChange(val: string) {
     setLicenseType(val);
     setAmount(licensePrices[val] || '');
+  }
+
+  // Filter clients for combobox
+  const filteredClients = useMemo(() => {
+    const q = clientName.toLowerCase().trim();
+    if (!q) return clientsList.slice(0, 8);
+    return clientsList.filter(c => {
+      const full = (c.full_name || `${c.first_name} ${c.last_name || ''}`).toLowerCase();
+      const ig = (c.instagram || '').toLowerCase().replace(/^@/, '');
+      const em = (c.email || '').toLowerCase();
+      return full.includes(q) || ig.includes(q) || em.includes(q);
+    }).slice(0, 8);
+  }, [clientsList, clientName]);
+
+  const exactMatchExists = useMemo(() => {
+    const q = clientName.toLowerCase().trim();
+    if (!q) return false;
+    return clientsList.some(c => {
+      const full = (c.full_name || `${c.first_name} ${c.last_name || ''}`).toLowerCase().trim();
+      return full === q;
+    });
+  }, [clientsList, clientName]);
+
+  // Generate unique list of clients for filter dropdown
+  const uniqueClients = useMemo(() => {
+    const set = new Set<string>();
+    sales.forEach(s => {
+      if (s.client_name && s.client_name.trim()) set.add(s.client_name.trim());
+    });
+    clientsList.forEach(c => {
+      const full = c.full_name || formatClientFullName(c.first_name, c.last_name);
+      if (full) set.add(full);
+    });
+    return ['All Clients', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [sales, clientsList]);
+
+  // Filter & sort sales based on selected time and client filters
+  const filteredSales = useMemo(() => {
+    let list = sales.filter(sale => {
+      const saleDate = new Date(sale.created_at);
+      const now = new Date();
+      
+      if (timeFilter === 'This Year') {
+        if (saleDate.getFullYear() !== now.getFullYear()) return false;
+      }
+      if (timeFilter === 'This Month') {
+        if (saleDate.getMonth() !== now.getMonth() || saleDate.getFullYear() !== now.getFullYear()) return false;
+      }
+      if (timeFilter === 'Last 7 Days') {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(now.getDate() - 7);
+        if (saleDate < sevenDaysAgo) return false;
+      }
+      if (timeFilter === 'Custom') {
+        if (customDateFrom && new Date(customDateFrom) > saleDate) return false;
+        if (customDateTo) {
+          const toDate = new Date(customDateTo);
+          toDate.setHours(23, 59, 59, 999);
+          if (toDate < saleDate) return false;
+        }
+      }
+
+      if (clientFilter && clientFilter !== 'All Clients' && clientFilter !== 'All') {
+        const sClient = (sale.client_name || '').toLowerCase().trim();
+        if (sClient !== clientFilter.toLowerCase().trim()) return false;
+      }
+
+      return true;
+    });
+
+    if (clientSort === 'asc') {
+      list.sort((a, b) => (a.client_name || '').localeCompare(b.client_name || ''));
+    } else if (clientSort === 'desc') {
+      list.sort((a, b) => (b.client_name || '').localeCompare(a.client_name || ''));
+    }
+
+    return list;
+  }, [sales, timeFilter, customDateFrom, customDateTo, clientFilter, clientSort]);
+
+  let combinedTotal = 0;
+  if (Object.keys(rates).length > 0) {
+    filteredSales.forEach(sale => {
+      const saleCurrency = sale.currency || 'USD';
+      const amountInUSD = saleCurrency === 'USD' ? sale.amount : sale.amount / (rates[saleCurrency] || 1);
+      const amountInTarget = displayCurrency === 'USD' ? amountInUSD : amountInUSD * (rates[displayCurrency] || 1);
+      combinedTotal += amountInTarget;
+    });
+  } else {
+    // Fallback if rates failed or loading
+    combinedTotal = filteredSales.reduce((sum, sale) => {
+      if ((sale.currency || 'USD') === displayCurrency) {
+        return sum + sale.amount;
+      }
+      return sum;
+    }, 0);
   }
 
   async function handleAddSale(e: React.FormEvent) {
@@ -138,17 +294,42 @@ export default function FinansePage() {
     }
 
     try {
-      const { error } = await supabase.from('sales').insert([
-        { 
-          beat_name: beatName, 
-          client_name: clientName, 
-          license_type: licenseType, 
-          amount: parseFloat(amount),
-          currency: currency,
-          created_at: new Date().toISOString(),
-          user_id: user.id
+      let finalClientId: string | null = selectedClient?.id || null;
+      let finalClientName = clientName.trim();
+
+      // If client name is provided, auto-find or create the client in database
+      if (finalClientName) {
+        try {
+          const client = await findOrCreateClientByName(finalClientName, user.id);
+          finalClientId = client.id;
+          finalClientName = client.full_name || formatClientFullName(client.first_name, client.last_name) || finalClientName;
+        } catch (clientErr) {
+          console.error("Error finding/creating client:", clientErr);
         }
-      ]);
+      }
+
+      const payload: any = { 
+        beat_name: beatName, 
+        client_name: finalClientName, 
+        license_type: licenseType, 
+        amount: parseFloat(amount),
+        currency: currency,
+        created_at: new Date().toISOString(),
+        user_id: user.id
+      };
+
+      if (finalClientId) {
+        payload.client_id = finalClientId;
+      }
+
+      let { error } = await supabase.from('sales').insert([payload]);
+
+      // Fallback if client_id column is not yet migrated in Supabase table
+      if (error && error.message?.includes('client_id')) {
+        delete payload.client_id;
+        const retry = await supabase.from('sales').insert([payload]);
+        error = retry.error;
+      }
 
       if (error) {
         alert(`Database error: ${error.message}`);
@@ -157,8 +338,10 @@ export default function FinansePage() {
 
       setBeatName('');
       setClientName('');
+      setSelectedClient(null);
       setAmount(licensePrices[licenseType] || '');
       fetchData(user.id);
+      fetchClients(user.id);
       
     } catch (err: any) {
       alert(`An unexpected error occurred: ${err.message}`);
@@ -179,74 +362,47 @@ export default function FinansePage() {
     );
   }
 
-  // Filter sales based on selected time filter
-  const filteredSales = sales.filter(sale => {
-    const saleDate = new Date(sale.created_at);
-    const now = new Date();
-    
-    if (timeFilter === 'This Year') {
-      return saleDate.getFullYear() === now.getFullYear();
-    }
-    if (timeFilter === 'This Month') {
-      return saleDate.getMonth() === now.getMonth() && saleDate.getFullYear() === now.getFullYear();
-    }
-    if (timeFilter === 'Last 7 Days') {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(now.getDate() - 7);
-      return saleDate >= sevenDaysAgo;
-    }
-    if (timeFilter === 'Custom') {
-      if (!customDateFrom && !customDateTo) return true;
-      if (customDateFrom && new Date(customDateFrom) > saleDate) return false;
-      if (customDateTo) {
-        const toDate = new Date(customDateTo);
-        toDate.setHours(23, 59, 59, 999);
-        if (toDate < saleDate) return false;
-      }
-      return true;
-    }
-    return true; // 'All'
-  });
-
-  let combinedTotal = 0;
-  if (Object.keys(rates).length > 0) {
-    filteredSales.forEach(sale => {
-      const saleCurrency = sale.currency || 'USD';
-      const amountInUSD = saleCurrency === 'USD' ? sale.amount : sale.amount / (rates[saleCurrency] || 1);
-      const amountInTarget = displayCurrency === 'USD' ? amountInUSD : amountInUSD * (rates[displayCurrency] || 1);
-      combinedTotal += amountInTarget;
-    });
-  } else {
-    // Fallback if rates failed or loading
-    combinedTotal = filteredSales.reduce((sum, sale) => {
-      if ((sale.currency || 'USD') === displayCurrency) {
-        return sum + sale.amount;
-      }
-      return sum;
-    }, 0);
-  }
-
   return (
     <div className="max-w-7xl mx-auto pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900">Finance & Sales</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-3xl font-bold tracking-tight text-gray-900">Finance & Sales</h2>
+            <Link
+              href="/clients"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 transition-colors shadow-2xs"
+            >
+              <Users size={14} className="text-gray-500" />
+              <span>Clients Database</span>
+            </Link>
+          </div>
           <p className="text-gray-500 mt-1">Track your profit and manage licenses.</p>
         </div>
         
-        <div className="flex flex-col items-end">
-          <div className="flex flex-wrap items-center space-x-1 border border-gray-200 rounded-lg p-1 bg-white">
-            <div className="px-2 text-gray-400"><Filter size={16} /></div>
-            {TIME_FILTERS.map(f => (
-              <button
-                key={f}
-                onClick={() => setTimeFilter(f)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${timeFilter === f ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-100'}`}
-              >
-                {f}
-              </button>
-            ))}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+          {/* Client Filter Dropdown */}
+          <div className="w-48 shrink-0">
+            <CustomSelect
+              options={uniqueClients}
+              value={clientFilter === 'All' ? 'All Clients' : clientFilter}
+              onChange={(val) => setClientFilter(val === 'All Clients' ? 'All' : val)}
+              placeholder="All Clients"
+            />
           </div>
+
+          <div className="flex flex-col items-end">
+            <div className="flex flex-wrap items-center space-x-1 border border-gray-200 rounded-lg p-1 bg-white">
+              <div className="px-2 text-gray-400"><Filter size={16} /></div>
+              {TIME_FILTERS.map(f => (
+                <button
+                  key={f}
+                  onClick={() => setTimeFilter(f)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${timeFilter === f ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
           
           {timeFilter === 'Custom' && (
             <div className="flex flex-wrap items-center gap-2 mt-2 p-2 bg-white border border-gray-200 rounded-lg shadow-sm animate-in fade-in slide-in-from-top-2">
@@ -294,6 +450,7 @@ export default function FinansePage() {
           )}
         </div>
       </div>
+    </div>
 
       <div className="mb-8 space-y-4">
         {/* Top Level: Total Combined Revenue */}
@@ -351,13 +508,118 @@ export default function FinansePage() {
                 />
               </div>
               
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Client (Optional)</label>
-                <input 
-                  type="text" value={clientName} onChange={e => setClientName(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-black transition-colors"
-                  placeholder="e.g. Lil Wayne"
-                />
+              {/* Smart Client Combobox */}
+              <div className="relative" ref={clientDropdownRef}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-gray-700">Client (Optional)</label>
+                  {selectedClient && (
+                    <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                      <UserCheck size={11} />
+                      Linked to DB
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    value={clientName} 
+                    onChange={e => {
+                      setClientName(e.target.value);
+                      setIsClientMenuOpen(true);
+                      if (selectedClient && e.target.value !== selectedClient.full_name) {
+                        setSelectedClient(null);
+                      }
+                    }}
+                    onFocus={() => setIsClientMenuOpen(true)}
+                    onClick={() => setIsClientMenuOpen(true)}
+                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 pr-8 text-sm focus:outline-none focus:border-black transition-colors"
+                    placeholder="Search or enter client name (e.g. Lil Wayne), @handle or email..."
+                  />
+                  {clientName && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClientName('');
+                        setSelectedClient(null);
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                      title="Clear client"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Combobox Dropdown */}
+                {isClientMenuOpen && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                    {filteredClients.length > 0 && (
+                      <div className="py-1">
+                        <div className="px-3 py-1 text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                          Existing Clients
+                        </div>
+                        {filteredClients.map(c => {
+                          const fullName = c.full_name || formatClientFullName(c.first_name, c.last_name);
+                          const isSelected = selectedClient?.id === c.id || clientName.trim().toLowerCase() === fullName.toLowerCase();
+                          return (
+                            <div
+                              key={c.id}
+                              onClick={() => {
+                                setClientName(fullName);
+                                setSelectedClient(c);
+                                setIsClientMenuOpen(false);
+                              }}
+                              className={`px-3 py-2 text-xs flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors ${
+                                isSelected ? 'bg-blue-50/60' : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-800 font-bold flex items-center justify-center text-[10px] shrink-0">
+                                  {(c.first_name?.[0] || 'C').toUpperCase()}
+                                </div>
+                                <div className="truncate">
+                                  <span className="font-semibold text-gray-900 block truncate">{fullName}</span>
+                                  <span className="text-[10px] text-gray-400 block truncate">
+                                    {c.instagram ? `@${c.instagram.replace(/^@/, '')}` : c.email || 'No contact info'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 bg-gray-100 rounded text-gray-600">
+                                  {c.total_purchases || 0} beats
+                                </span>
+                                {isSelected && <Check size={14} className="text-black" />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Auto-create option if typed client doesn't exist */}
+                    {clientName.trim() && !exactMatchExists && (
+                      <div 
+                        onClick={() => {
+                          setIsClientMenuOpen(false);
+                        }}
+                        className="px-3 py-2.5 text-xs text-blue-600 hover:bg-blue-50 cursor-pointer border-t border-gray-100 flex items-center gap-2 transition-colors font-medium"
+                      >
+                        <UserPlus size={14} className="shrink-0 text-blue-600" />
+                        <div className="truncate">
+                          <span>+ Add as new client: </span>
+                          <strong className="text-blue-900">"{clientName.trim()}"</strong>
+                          <span className="text-[10px] text-gray-400 block font-normal">Will be automatically saved to your client database</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {filteredClients.length === 0 && !clientName.trim() && (
+                      <div className="p-4 text-center text-xs text-gray-400">
+                        No clients found. Type a name to add a new client.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -398,7 +660,24 @@ export default function FinansePage() {
               <thead className="bg-gray-50 hidden md:table-header-group">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Beat</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Client</th>
+                  <th 
+                    onClick={() => {
+                      setClientSort(prev => prev === 'none' ? 'asc' : prev === 'asc' ? 'desc' : 'none');
+                    }}
+                    className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none transition-colors"
+                    title="Sort by client name"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Client</span>
+                      {clientSort === 'asc' ? (
+                        <ArrowUp size={14} className="text-black" />
+                      ) : clientSort === 'desc' ? (
+                        <ArrowDown size={14} className="text-black" />
+                      ) : (
+                        <ArrowUpDown size={14} className="text-gray-400" />
+                      )}
+                    </div>
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">License</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
@@ -416,7 +695,18 @@ export default function FinansePage() {
                       <td className="block md:table-cell md:px-6 md:py-4 py-1 font-bold text-gray-900 text-base md:text-sm">{sale.beat_name || sale.beats?.title || 'Unknown'}</td>
                       <td className="block md:table-cell md:px-6 md:py-4 py-1 text-sm text-gray-600">
                         <span className="inline-block md:hidden text-xs text-gray-400 uppercase font-semibold mr-2">Client:</span>
-                        {sale.client_name || '-'}
+                        {sale.client_name ? (
+                          <Link
+                            href={`/clients?search=${encodeURIComponent(sale.client_name)}`}
+                            className="text-gray-900 font-medium hover:underline hover:text-blue-600 inline-flex items-center gap-1 transition-colors"
+                            title="View client details in Clients tab"
+                          >
+                            <span>{sale.client_name}</span>
+                            <ExternalLink size={11} className="text-gray-400" />
+                          </Link>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="block md:table-cell md:px-6 md:py-4 py-1 text-sm text-gray-600">
                         <span className="inline-block md:hidden text-xs text-gray-400 uppercase font-semibold mr-2">License:</span>
@@ -470,5 +760,13 @@ export default function FinansePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function FinansePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">Loading finance data...</div>}>
+      <FinanseContent />
+    </Suspense>
   );
 }

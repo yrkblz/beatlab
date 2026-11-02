@@ -57,38 +57,81 @@ const mockDeleteEq = jest.fn().mockResolvedValue({ error: null });
 const mockDelete = jest.fn(() => ({ eq: mockDeleteEq }));
 const mockInsert = jest.fn().mockResolvedValue({ error: null });
 
+const createSalesChain = () => {
+  const result = { data: mockSales, error: null };
+  return {
+    order: jest.fn().mockResolvedValue(result),
+    then: (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject),
+  };
+};
+
+const defaultSupabaseFrom = (table: string) => {
+  if (table === 'profiles') {
+    return {
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          single: jest.fn().mockResolvedValue({ data: { base_currency: 'USD' }, error: null }),
+        })),
+      })),
+    };
+  }
+  if (table === 'sales') {
+    return {
+      select: jest.fn(() => ({
+        eq: jest.fn(() => createSalesChain()),
+      })),
+      insert: mockInsert,
+      delete: mockDelete,
+    };
+  }
+  if (table === 'clients') {
+    return {
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          order: jest.fn().mockResolvedValue({
+            data: [
+              {
+                id: 'cli-101',
+                first_name: 'Metro',
+                last_name: 'Boomin',
+                instagram: 'metroboomin',
+                email: 'metro@boominati.com',
+                manual_purchases_count: 2,
+                user_id: 'usr-123',
+              },
+            ],
+            error: null,
+          }),
+        })),
+      })),
+      insert: jest.fn(() => ({
+        select: jest.fn(() => ({
+          single: jest.fn().mockResolvedValue({
+            data: {
+              id: 'cli-new-99',
+              first_name: 'Kendrick',
+              last_name: 'Lamar',
+              user_id: 'usr-123',
+            },
+            error: null,
+          }),
+        })),
+      })),
+    };
+  }
+  return {
+    select: jest.fn(() => ({
+      eq: jest.fn().mockResolvedValue({ data: [], error: null }),
+    })),
+  };
+};
+
 jest.mock('@/lib/supabase', () => ({
   supabase: {
     auth: {
       getUser: jest.fn(),
     },
-    from: jest.fn((table: string) => {
-      if (table === 'profiles') {
-        return {
-          select: jest.fn(() => ({
-            eq: jest.fn(() => ({
-              single: jest.fn().mockResolvedValue({ data: { base_currency: 'USD' }, error: null }),
-            })),
-          })),
-        };
-      }
-      if (table === 'sales') {
-        return {
-          select: jest.fn(() => ({
-            eq: jest.fn(() => ({
-              order: jest.fn().mockResolvedValue({ data: mockSales, error: null }),
-            })),
-          })),
-          insert: mockInsert,
-          delete: mockDelete,
-        };
-      }
-      return {
-        select: jest.fn(() => ({
-          eq: jest.fn().mockResolvedValue({ data: [], error: null }),
-        })),
-      };
-    }),
+    from: jest.fn(),
   },
 }));
 
@@ -97,6 +140,7 @@ describe('FinansePage (/finanse)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (supabase.from as jest.Mock).mockImplementation(defaultSupabaseFrom);
     originalFetch = global.fetch;
     global.fetch = jest.fn().mockImplementation((url: string) => {
       if (typeof url === 'string' && url.includes('exchangerate-api')) {
@@ -389,5 +433,119 @@ describe('FinansePage (/finanse)', () => {
     await waitFor(() => {
       expect(screen.getByText(/No transactions in selected period/i)).toBeInTheDocument();
     });
+  });
+
+  it('shows existing clients in the combobox dropdown and allows selection', async () => {
+    await act(async () => {
+      render(<FinansePage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Finance & Sales')).toBeInTheDocument();
+    });
+
+    const clientInput = screen.getByPlaceholderText(/Search or enter client name/i);
+    await act(async () => {
+      fireEvent.change(clientInput, { target: { value: 'Metro' } });
+    });
+
+    // Existing client Metro Boomin should appear in dropdown
+    await waitFor(() => {
+      expect(screen.getByText('Existing Clients')).toBeInTheDocument();
+      expect(screen.getByText('Metro Boomin')).toBeInTheDocument();
+      expect(screen.getByText('@metroboomin')).toBeInTheDocument();
+    });
+
+    // Select Metro Boomin
+    await act(async () => {
+      fireEvent.click(screen.getByText('Metro Boomin'));
+    });
+
+    // Input should be filled and linked indicator shown
+    expect(clientInput).toHaveValue('Metro Boomin');
+    expect(screen.getByText('Linked to DB')).toBeInTheDocument();
+  });
+
+  it('auto-creates new client when a non-existent client name is entered and sale is submitted', async () => {
+    await act(async () => {
+      render(<FinansePage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Finance & Sales')).toBeInTheDocument();
+    });
+
+    const beatInput = screen.getByPlaceholderText(/e\.g\. Dark Knight/i);
+    fireEvent.change(beatInput, { target: { value: 'Not Like Us' } });
+
+    const clientInput = screen.getByPlaceholderText(/Search or enter client name/i);
+    fireEvent.change(clientInput, { target: { value: 'Kendrick Lamar' } });
+
+    // Combobox shows option to add as new client
+    await waitFor(() => {
+      expect(screen.getByText(/\+ Add as new client:/i)).toBeInTheDocument();
+    });
+
+    const addBtn = screen.getByText('Add Revenue');
+    await act(async () => {
+      fireEvent.click(addBtn);
+    });
+
+    await waitFor(() => {
+      expect(mockInsert).toHaveBeenCalled();
+      const lastCall = mockInsert.mock.calls[mockInsert.mock.calls.length - 1];
+      const insertPayload = lastCall[0][0];
+      expect(insertPayload.beat_name).toBe('Not Like Us');
+      expect(insertPayload.client_name).toBe('Kendrick Lamar');
+    });
+  });
+
+  it('filters transactions by selected client from client filter dropdown', async () => {
+    await act(async () => {
+      render(<FinansePage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Finance & Sales')).toBeInTheDocument();
+      expect(screen.getByText('Burna Boy')).toBeInTheDocument();
+      expect(screen.getByText('Lil Baby')).toBeInTheDocument();
+    });
+
+    // Open client filter dropdown (currently "All Clients")
+    const clientFilterSelect = screen.getByText('All Clients');
+    fireEvent.click(clientFilterSelect);
+
+    // Click "Burna Boy" in dropdown
+    const burnaOption = screen.getAllByText('Burna Boy')[0];
+    fireEvent.click(burnaOption);
+
+    // Only Burna Boy's sale should remain in table
+    await waitFor(() => {
+      expect(screen.getByText('Afro Groove')).toBeInTheDocument();
+      expect(screen.queryByText('Trap Banger')).not.toBeInTheDocument();
+    });
+  });
+
+  it('sorts transactions by client when clicking the Client column header', async () => {
+    await act(async () => {
+      render(<FinansePage />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Finance & Sales')).toBeInTheDocument();
+    });
+
+    // Header has "Client"
+    const clientHeader = screen.getByText('Client');
+    
+    // First click: asc (A-Z) -> Burna Boy, Lil Baby
+    fireEvent.click(clientHeader);
+    const rowsAsc = screen.getAllByText(/Burna Boy|Lil Baby/);
+    expect(rowsAsc[0]).toHaveTextContent('Burna Boy');
+
+    // Second click: desc (Z-A) -> Lil Baby, Burna Boy
+    fireEvent.click(clientHeader);
+    const rowsDesc = screen.getAllByText(/Burna Boy|Lil Baby/);
+    expect(rowsDesc[0]).toHaveTextContent('Lil Baby');
   });
 });
