@@ -377,8 +377,8 @@ export async function extractArtistsFromPost(
             continue;
           }
 
-          // Reject videographers, camera operators, visual directors
-          if (classification.isVideographer || classification.isStudio) {
+          // Reject audio engineers / studios who are not recording artists
+          if (classification.isEngineer && !classification.isArtist) {
             continue;
           }
 
@@ -476,7 +476,7 @@ export async function extractArtistsFromChannelPosts(
 
                 if (options.filterOnlyArtists !== false) {
                   if (classification.isProducer && !classification.isArtist) continue;
-                  if (classification.isVideographer || classification.isStudio) continue;
+                  if (classification.isEngineer && !classification.isArtist) continue;
                   const isExplicitNonMusic = /(?:photographer|videographer|clothing|fashion\s*brand|barbershop|chef|restaurant|realtor)/i.test(bio);
                   if (isExplicitNonMusic && !classification.hasMusicLink && !classification.isArtist) continue;
                 }

@@ -109,7 +109,7 @@ export class InstagramSessionClient {
         const match = c?.match(/csrftoken=([^;]+)/);
         if (match && match[1]) {
           this.csrfToken = match[1];
-          return this.csrfToken;
+          return match[1];
         }
       }
     } catch (e) {
@@ -118,7 +118,7 @@ export class InstagramSessionClient {
     if (!this.csrfToken) {
       this.csrfToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
     }
-    return this.csrfToken;
+    return this.csrfToken || '';
   }
 
   private getHeaders(): Record<string, string> {

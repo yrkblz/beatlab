@@ -62,7 +62,7 @@ describe('/api/instagram-actions Route', () => {
         threadId: 'th_998877',
       });
 
-      (InstagramSessionClient as jest.Mock).mockImplementation(() => ({
+      (InstagramSessionClient as unknown as jest.Mock).mockImplementation(() => ({
         resolveUserId: mockResolveUserId,
         sendDirectMessage: mockSendDirectMessage,
       }));
@@ -151,7 +151,7 @@ describe('/api/instagram-actions Route', () => {
         hasMore: false,
       });
 
-      (InstagramSessionClient as jest.Mock).mockImplementation(() => ({
+      (InstagramSessionClient as unknown as jest.Mock).mockImplementation(() => ({
         resolveUserId: mockResolveUserId,
         fetchUserProfile: mockFetchUserProfile,
         fetchFollowersBatch: mockFetchFollowersBatch,
@@ -199,7 +199,7 @@ describe('/api/instagram-actions Route', () => {
         .fn()
         .mockRejectedValue(new Error('Instagram following fetch failed: checkpoint_required suspended'));
 
-      (InstagramSessionClient as jest.Mock).mockImplementation(() => ({
+      (InstagramSessionClient as unknown as jest.Mock).mockImplementation(() => ({
         resolveUserId: mockResolveUserId,
         fetchUserProfile: mockFetchUserProfile,
         fetchFollowersBatch: mockFetchFollowersBatch,
@@ -243,7 +243,7 @@ describe('/api/instagram-actions Route', () => {
         hasMore: false,
       });
 
-      (InstagramSessionClient as jest.Mock).mockImplementation(() => ({
+      (InstagramSessionClient as unknown as jest.Mock).mockImplementation(() => ({
         resolveUserId: mockResolveUserId,
         fetchUserProfile: mockFetchUserProfile,
         fetchFollowersBatch: mockFetchFollowersBatch,
