@@ -38,7 +38,7 @@ export default function InstagramLeadsPage() {
 
   // Filters
   const [roleFilters, setRoleFilters] = useState<string[]>(['artist', 'producer']);
-  const [minFollowers, setMinFollowers] = useState<number>(500);
+  const [minFollowers, setMinFollowers] = useState<number>(100);
   const [maxFollowers, setMaxFollowers] = useState<number>(200000);
   const [onlyWithContact, setOnlyWithContact] = useState<boolean>(false);
   const [keepUncategorized, setKeepUncategorized] = useState<boolean>(false);
@@ -48,6 +48,21 @@ export default function InstagramLeadsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [rawLeads, setRawLeads] = useState<InstagramLeadItem[]>([]);
+  const [searchProgress, setSearchProgress] = useState<{
+    scanned: number;
+    found: number;
+    target: number;
+    isExhausted: boolean;
+  } | null>(null);
+  const [exhaustedNotice, setExhaustedNotice] = useState<{
+    isExhausted: boolean;
+    totalScanned: number;
+    producersCount: number;
+    artistsCount: number;
+    source: string;
+    mode: string;
+    foundCount: number;
+  } | null>(null);
   const [history, setHistory] = useState<string[]>([]); // list of handles
   const [priorHistory, setPriorHistory] = useState<string[]>([]);
   const [copiedType, setCopiedType] = useState<string | null>(null);
@@ -80,12 +95,19 @@ export default function InstagramLeadsPage() {
     if (rawLeads.length === 0) return { leads: [], duplicateCount: 0 };
     if (!onlyUnique) return { leads: rawLeads, duplicateCount: 0 };
 
-    const historySet = new Set(priorHistory.map(h => h.toLowerCase()));
-    const filtered = rawLeads.filter(l => !historySet.has(l.handle.toLowerCase()));
+    const cleanInput = source.trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/.*$/, '').replace(/^@/, '').toLowerCase();
+    const historySet = new Set(priorHistory.map(h => h.replace(/^@/, '').toLowerCase()));
+
+    const filtered = rawLeads.filter(l => {
+      const cleanHandle = l.handle.replace(/^@/, '').toLowerCase();
+      // Always show the directly searched target profile
+      if (cleanInput && cleanHandle === cleanInput) return true;
+      return !historySet.has(cleanHandle);
+    });
     const duplicates = rawLeads.length - filtered.length;
 
     return { leads: filtered, duplicateCount: duplicates };
-  }, [rawLeads, onlyUnique, priorHistory]);
+  }, [rawLeads, onlyUnique, priorHistory, source]);
 
   // Handle Search Submission
   async function handleSearch(e: React.FormEvent) {
@@ -94,40 +116,94 @@ export default function InstagramLeadsPage() {
 
     setLoading(true);
     setError('');
+    setExhaustedNotice(null);
+    setSearchProgress({
+      scanned: 0,
+      found: 0,
+      target: limit,
+      isExhausted: false,
+    });
+
     // Snapshot existing history so new leads aren't deduplicated against themselves
     const currentPrior = [...history];
     setPriorHistory(currentPrior);
 
     try {
-      const res = await fetch('/api/instagram-leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: source.trim(),
-          mode,
-          limit,
-          minFollowers,
-          maxFollowers,
-          roleFilters,
-          onlyWithContact,
-          keepUncategorized,
-        }),
-      });
+      let accumulatedLeads: InstagramLeadItem[] = [];
+      let currentCursor: string | undefined = undefined;
+      let isExhausted = false;
+      let totalScanned = 0;
+      let producersCount = 0;
+      let artistsCount = 0;
+      let pass = 0;
+      const maxPasses = 10;
+      const cleanSource = source.trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/.*$/, '').replace(/^@/, '');
 
-      const data = await res.json();
+      while (accumulatedLeads.length < limit && !isExhausted && pass < maxPasses) {
+        pass++;
+        const res: Response = await fetch('/api/instagram-leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source: source.trim(),
+            mode,
+            limit: limit - accumulatedLeads.length,
+            cursor: currentCursor,
+            minFollowers,
+            maxFollowers,
+            roleFilters,
+            onlyWithContact,
+            keepUncategorized,
+          }),
+        });
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to scan Instagram profiles.');
+        const data: any = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to scan Instagram profiles.');
+        }
+
+        const incomingLeads: InstagramLeadItem[] = data.leads || [];
+        accumulatedLeads = [...accumulatedLeads, ...incomingLeads];
+        totalScanned += data.totalScanned || 0;
+        producersCount += data.producersFoundCount || 0;
+        artistsCount += data.artistsFoundCount || 0;
+        currentCursor = data.nextCursor || undefined;
+        isExhausted = Boolean(data.isExhausted || !currentCursor);
+
+        setRawLeads([...accumulatedLeads]);
+        setSearchProgress({
+          scanned: totalScanned,
+          found: accumulatedLeads.length,
+          target: limit,
+          isExhausted,
+        });
+
+        if (isExhausted) break;
       }
 
-      const incomingLeads: InstagramLeadItem[] = data.leads || [];
-      setRawLeads(incomingLeads);
+      if (isExhausted) {
+        setExhaustedNotice({
+          isExhausted: true,
+          totalScanned,
+          producersCount,
+          artistsCount,
+          source: cleanSource,
+          mode,
+          foundCount: accumulatedLeads.length,
+        });
+      }
 
-      if (incomingLeads.length === 0) {
-        setError(`No matching profiles found for "${source}". Try adjusting the follower range (500 - 200k) or selecting different role filters.`);
+      if (accumulatedLeads.length === 0) {
+        if (!isExhausted) {
+          const tip = mode === 'followers'
+            ? ' Tip: Switch collection target to "Following" (media accounts like On The Radar follow 5,800 active artists/producers) or enable "Producers".'
+            : ' Try adjusting the follower range (e.g. min 100) or selecting different role filters.';
+          setError(`No matching profiles found for "${source}".${tip}`);
+        }
       } else {
         // Save newly discovered handles into history
-        const newHandles = incomingLeads.map(l => l.handle);
+        const newHandles = accumulatedLeads.map(l => l.handle);
         const combinedHistory = Array.from(new Set([...history, ...newHandles]));
         setHistory(combinedHistory);
         localStorage.setItem(IG_HISTORY_STORAGE_KEY, JSON.stringify(combinedHistory));
@@ -136,6 +212,7 @@ export default function InstagramLeadsPage() {
       setError(err.message || 'An error occurred while connecting to the scraper API.');
     } finally {
       setLoading(false);
+      setSearchProgress(null);
     }
   }
 
@@ -476,12 +553,105 @@ export default function InstagramLeadsPage() {
           </div>
         </form>
 
+        {loading && searchProgress && (
+          <div className="p-4 bg-blue-50/90 border border-blue-200 rounded-xl text-sm space-y-2.5">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                <div>
+                  <p className="font-semibold text-xs text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Trwa przeszukiwanie Instagrama...</span>
+                  </p>
+                  <p className="text-xs text-blue-700">
+                    {searchProgress.scanned === 0 ? (
+                      <>Pobieranie listy użytkowników i sprawdzanie bio/Spotify...</>
+                    ) : (
+                      <>Przeskanowano <strong>{searchProgress.scanned}</strong> profili • Znaleziono <strong>{searchProgress.found}</strong> z <strong>{searchProgress.target}</strong> kontaktów</>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-bold px-2.5 py-1 bg-blue-100 text-blue-800 rounded-lg shrink-0">
+                {searchProgress.found} / {searchProgress.target}
+              </span>
+            </div>
+            <div className="w-full bg-blue-100/70 h-1.5 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.max(5, Math.min(100, Math.round((searchProgress.found / searchProgress.target) * 100)))}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {exhaustedNotice && (
+          <div className="p-5 bg-gradient-to-r from-emerald-50/90 via-teal-50/80 to-blue-50/90 border border-emerald-200 rounded-2xl shadow-xs space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5 text-emerald-900 font-bold text-sm">
+                <CheckCircle2 size={20} className="text-emerald-600 shrink-0" />
+                <span>Przeszukano całe konto (@{exhaustedNotice.source})!</span>
+              </div>
+              <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                100% ukończono
+              </span>
+            </div>
+
+            <p className="text-xs text-emerald-950/80 leading-relaxed">
+              Przeskanowano wszystkich <strong>{exhaustedNotice.totalScanned}</strong> dostępnych użytkowników w sekcji{' '}
+              <strong>{exhaustedNotice.mode === 'followers' ? 'Obserwujący (Followers)' : 'Obserwowani (Following)'}</strong>.
+              {exhaustedNotice.foundCount > 0 ? (
+                <> Znaleziono <strong>{exhaustedNotice.foundCount}</strong> pasujących twórców z bezpośrednimi linkami muzycznymi (Spotify/Soundcloud/Linktree).</>
+              ) : (
+                <> Żaden z dostępnych użytkowników nie spełnił wybranych filtrów.</>
+              )}
+            </p>
+
+            {exhaustedNotice.producersCount > 0 && !roleFilters.includes('producer') && (
+              <div className="pt-2 border-t border-emerald-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-900 bg-amber-50/90 p-3 rounded-xl border border-amber-200">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-amber-600 shrink-0" />
+                  Wśród sprawdzonych osób znaleziono <strong>{exhaustedNotice.producersCount}</strong> producentów/beatmakerów ze Spotify.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRoleFilters(prev => [...prev, 'producer'])}
+                  className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium text-xs shrink-0 cursor-pointer transition-colors"
+                >
+                  Zaznacz Producers
+                </button>
+              </div>
+            )}
+
+            {exhaustedNotice.mode === 'followers' && exhaustedNotice.totalScanned <= 50 && (
+              <div className="text-[11px] text-gray-600 bg-white/80 p-2.5 rounded-xl border border-gray-200/70">
+                ℹ️ Instagram udostępnił {exhaustedNotice.totalScanned} ostatnich publicznych obserwujących (Instagram ogranicza listę zewnętrznych obserwujących dla dużych profili). Wskazówka: Wybierz <strong>Following (Obserwowani)</strong>, gdzie konto @{exhaustedNotice.source} ma tysiące aktywnych muzyków bez limitu!
+              </div>
+            )}
+          </div>
+        )}
+
         {error && (
           <div className="p-4 bg-red-50 text-red-700 border border-red-200 rounded-xl text-sm flex items-start gap-3">
             <AlertCircle size={18} className="shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold text-xs uppercase tracking-wider mb-0.5">Scraper Notice</p>
               <p>{error}</p>
+            </div>
+          </div>
+        )}
+
+        {rawLeads.length > 0 && leads.length === 0 && duplicateCount > 0 && (
+          <div className="p-4 bg-amber-50 text-amber-900 border border-amber-200 rounded-xl text-sm flex items-start gap-3">
+            <Sparkles size={18} className="shrink-0 mt-0.5 text-amber-600" />
+            <div className="space-y-1">
+              <p className="font-semibold text-xs uppercase tracking-wider text-amber-800">
+                All discovered profiles ({duplicateCount}) were skipped as duplicates
+              </p>
+              <p className="text-xs text-amber-700">
+                You have <strong>Exclude previously collected leads</strong> enabled, and these profiles are already in your local history. Uncheck that box or click <strong>Clear</strong> next to the history counter to display them.
+              </p>
             </div>
           </div>
         )}
@@ -503,6 +673,13 @@ export default function InstagramLeadsPage() {
               {duplicateCount > 0 && onlyUnique && (
                 <span className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full font-medium">
                   {duplicateCount} duplicates skipped
+                </span>
+              )}
+
+              {exhaustedNotice?.isExhausted && (
+                <span className="text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full font-medium flex items-center gap-1">
+                  <CheckCircle2 size={12} className="text-emerald-600" />
+                  Przeszukano całe konto (100%)
                 </span>
               )}
             </div>

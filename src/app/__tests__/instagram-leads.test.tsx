@@ -5,6 +5,7 @@ import InstagramLeadsPage, {
 } from '../instagram-leads/page';
 import { supabase } from '@/lib/supabase';
 import { exportLeadsToExcel, exportLeadsToCsv } from '@/lib/instagram-export';
+import { classifyProfile, isMusicLink } from '@/lib/instagram-classifier';
 
 // Mock clipboard and alert
 const originalClipboard = navigator.clipboard;
@@ -112,6 +113,20 @@ describe('InstagramLeadsPage (/instagram-leads)', () => {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({ leads: [] }),
+          });
+        }
+
+        if (body.source === 'exhausted-search') {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                leads: [],
+                totalScanned: 48,
+                isExhausted: true,
+                producersFoundCount: 3,
+                artistsFoundCount: 0,
+              }),
           });
         }
 
@@ -287,5 +302,119 @@ describe('InstagramLeadsPage (/instagram-leads)', () => {
     const csvBtn = screen.getByRole('button', { name: /CSV/i });
     fireEvent.click(csvBtn);
     expect(exportLeadsToCsv).toHaveBeenCalled();
+  });
+
+  it('displays "Przeszukano całe konto" banner when entire account has been scanned', async () => {
+    await act(async () => {
+      render(<InstagramLeadsPage />);
+    });
+
+    const input = screen.getByPlaceholderText(/e\.g\. https:\/\/www\.instagram\.com\/roseeyeview\/ or @ontheradar/i);
+    fireEvent.change(input, { target: { value: 'exhausted-search' } });
+
+    await act(async () => {
+      fireEvent.submit(input.closest('form')!);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Przeszukano całe konto \(@exhausted-search\)!/i)).toBeInTheDocument();
+      expect(screen.getByText(/Przeskanowano wszystkich/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/48/i).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('classifyProfile & isMusicLink (Strict Music & Producer Rules)', () => {
+    it('isMusicLink accurately identifies Spotify, Apple Music, Linktree, and rejects generic websites', () => {
+      expect(isMusicLink('https://open.spotify.com/artist/4Z8W4fKeB5YxbusRsdQVPb')).toBe(true);
+      expect(isMusicLink('https://music.apple.com/us/artist/drake/271256')).toBe(true);
+      expect(isMusicLink('https://linktr.ee/prodthurts')).toBe(true);
+      expect(isMusicLink('https://soundcloud.com/metroboomin')).toBe(true);
+      expect(isMusicLink('https://unitedmasters.com/m/example')).toBe(true);
+
+      // Rejects generic or personal website domains
+      expect(isMusicLink('https://zayon.com.br')).toBe(false);
+      expect(isMusicLink('https://wayd.com.br')).toBe(false);
+      expect(isMusicLink('https://clothingbrand.com')).toBe(false);
+      expect(isMusicLink('')).toBe(false);
+    });
+
+    it('BeatStars links are accepted ONLY if producers is enabled (allowBeatStores = true)', () => {
+      // By default (searching for artists or general), BeatStars is NOT accepted as an artist music link
+      expect(isMusicLink('https://beatstars.com/producer123')).toBe(false);
+      expect(isMusicLink('https://bsta.rs/abc1234')).toBe(false);
+      expect(isMusicLink('https://airbit.com/producer123')).toBe(false);
+
+      // When allowBeatStores is true (searching for producers), BeatStars is accepted!
+      expect(isMusicLink('https://beatstars.com/producer123', true)).toBe(true);
+      expect(isMusicLink('https://bsta.rs/abc1234', true)).toBe(true);
+      expect(isMusicLink('https://airbit.com/producer123', true)).toBe(true);
+    });
+
+    it('classifies profiles like "zayon.com.br" and "prodthurts" as Producer, not Artist', () => {
+      // Profile from user image 2: zayon.com.br with "BR Producer & Engineer"
+      const zayon = classifyProfile(
+        'BR Producer & Engineer\nFounder: @wayd.com.br\nMGMT: @bigceo.com.br',
+        ['https://wayd.com.br'],
+        'zayon.com.br',
+        'zayon.'
+      );
+      expect(zayon.category).toBe('Продюсер');
+      expect(zayon.isProducer).toBe(true);
+      expect(zayon.isArtist).toBe(false);
+
+      // Profile from user image 1: prodthurts with linktr.ee/prodthurts
+      const prodthurts = classifyProfile(
+        'DM for beats | cookup daily',
+        ['https://linktr.ee/prodthurts'],
+        'prodthurts',
+        'Thurts'
+      );
+      expect(prodthurts.category).toBe('Продюсер');
+      expect(prodthurts.isProducer).toBe(true);
+      expect(prodthurts.isArtist).toBe(false);
+
+      // Actual artist with spotify
+      const rapper = classifyProfile(
+        'Recording artist • Stream my new single on Spotify',
+        ['https://open.spotify.com/artist/123'],
+        'young_rapper',
+        'Young Rapper'
+      );
+      expect(rapper.category).toBe('Артист');
+      expect(rapper.isArtist).toBe(true);
+      expect(rapper.isProducer).toBe(false);
+    });
+
+    it('profile with BeatStars link is identified as Producer and link is valid ONLY when allowBeatStores is true', () => {
+      // Profile that only has BeatStars link
+      const beatstarsProducer = classifyProfile(
+        'Check my store for new loops and vibes',
+        ['https://beatstars.com/soundmaster'],
+        'soundmaster',
+        'Sound Master',
+        { allowBeatStores: false }
+      );
+
+      // When searching for artists (allowBeatStores: false):
+      expect(beatstarsProducer.category).toBe('Продюсер');
+      expect(beatstarsProducer.isProducer).toBe(true);
+      expect(beatstarsProducer.isArtist).toBe(false);
+      // BeatStars is NOT accepted as a music link for artists:
+      expect(beatstarsProducer.hasMusicLink).toBe(false);
+
+      // When searching for producers (allowBeatStores: true):
+      const forProducersSearch = classifyProfile(
+        'Check my store for new loops and vibes',
+        ['https://beatstars.com/soundmaster'],
+        'soundmaster',
+        'Sound Master',
+        { allowBeatStores: true }
+      );
+      expect(forProducersSearch.category).toBe('Продюсер');
+      expect(forProducersSearch.isProducer).toBe(true);
+      expect(forProducersSearch.isArtist).toBe(false);
+      // BeatStars IS accepted as a qualifying link when searching for producers!
+      expect(forProducersSearch.hasMusicLink).toBe(true);
+    });
   });
 });
