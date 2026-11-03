@@ -8,11 +8,9 @@ function createMimeMessage(to: string, senderEmail: string, subject: string, htm
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=UTF-8',
     'Content-Transfer-Encoding: base64',
-    '',
-    Buffer.from(html, 'utf-8').toString('base64'),
   ].filter(Boolean);
 
-  const rawMime = headers.join('\r\n');
+  const rawMime = headers.join('\r\n') + '\r\n\r\n' + Buffer.from(html, 'utf-8').toString('base64');
   return Buffer.from(rawMime, 'utf-8')
     .toString('base64')
     .replace(/\+/g, '-')

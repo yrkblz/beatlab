@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 
 const mockOrder = jest.fn();
 const mockEq = jest.fn(() => ({ order: mockOrder }));
-const mockSelect = jest.fn(() => ({ eq: mockEq, order: mockOrder }));
+const mockSelect = jest.fn(() => ({ eq: mockEq, is: mockEq, order: mockOrder }));
 const mockDelete = jest.fn(() => ({ in: jest.fn(() => ({ eq: jest.fn(() => Promise.resolve({ error: null })) })) }));
 
 jest.mock('@/lib/supabase', () => ({

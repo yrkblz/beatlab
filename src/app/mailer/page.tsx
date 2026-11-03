@@ -82,10 +82,13 @@ export default function MailerPage() {
   const effectiveGoogleToken = session?.provider_token || googleToken;
 
   async function reconnectGoogleDrive() {
+    const redirectUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/mailer`
+      : '/mailer';
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.href,
+        redirectTo: redirectUrl,
         scopes: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/drive.readonly',
         queryParams: { access_type: 'offline', prompt: 'consent' }
       }
@@ -269,7 +272,18 @@ export default function MailerPage() {
         }
         setCampaigns([]);
       } else {
-        const list = data || [];
+        let list = data || [];
+        // If user has 0 campaigns under user_id, check legacy campaigns
+        if (list.length === 0) {
+          const { data: legacyData, error: legacyErr } = await supabase
+            .from('campaigns')
+            .select(`*, email_logs ( id, recipient_email, opened, opened_at )`)
+            .is('user_id', null)
+            .order('created_at', { ascending: false });
+          if (!legacyErr && legacyData && legacyData.length > 0) {
+            list = legacyData;
+          }
+        }
         setCampaigns(list);
         setSelectedCampaign((prev: any) => {
           if (prev) {
@@ -343,12 +357,35 @@ export default function MailerPage() {
       setSupabaseBeats([]);
       return;
     }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('beats')
       .select('*')
       .eq('user_id', targetUserId)
       .order('created_at', { ascending: false });
-    if (data) setSupabaseBeats(data);
+
+    if (error) {
+      setSupabaseBeats([]);
+      return;
+    }
+
+    if (data && data.length > 0) {
+      setSupabaseBeats(data);
+      return;
+    }
+
+    // Fallback for legacy beats uploaded before user_id column
+    try {
+      const q = supabase.from('beats').select('*');
+      if (typeof (q as any).is === 'function') {
+        const { data: legacyBeats } = await (q as any).is('user_id', null).order('created_at', { ascending: false });
+        if (legacyBeats && legacyBeats.length > 0) {
+          setSupabaseBeats(legacyBeats);
+          return;
+        }
+      }
+    } catch {}
+
+    setSupabaseBeats(data || []);
   }
 
   async function loadDriveFiles(token: string, folderId: string) {
@@ -356,17 +393,33 @@ export default function MailerPage() {
     setLoadingDrive(true);
     setDriveError(null);
     try {
-      const query = `trashed = false and '${folderId}' in parents and (mimeType contains 'audio/' or mimeType contains 'application/zip' or mimeType contains 'application/x-zip' or name contains '.mp3' or name contains '.wav' or name contains '.zip' or name contains '.rar' or mimeType = 'application/vnd.google-apps.folder')`;
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,webViewLink,iconLink)&orderBy=folder,modifiedTime desc`, {
+      // Standard valid Google Drive API query without invalid operators
+      const query = `trashed = false and '${folderId}' in parents`;
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,webViewLink,iconLink)&orderBy=folder,modifiedTime desc&pageSize=100`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
-      if (data.error) {
+      if (!res.ok || data.error) {
         console.error('Error fetching from Google Drive', data.error);
-        setDriveError(data.error.message || 'Google Drive session expired or permission denied.');
+        const isAuthExpired = res.status === 401 || data.error?.code === 401;
+        if (isAuthExpired) {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('beatlab_google_provider_token');
+          }
+          setGoogleToken(null);
+        }
+        setDriveError(data.error?.message || 'Google Drive session expired or permission denied.');
         setDriveFiles([]);
       } else if (data.files) {
-        setDriveFiles(data.files);
+        // Filter folders and audio/zip archives client-side safely
+        const audioExts = ['.mp3', '.wav', '.flac', '.aif', '.aiff', '.m4a', '.ogg', '.zip', '.rar', '.7z', '.tar', '.gz'];
+        const filtered = data.files.filter((f: any) => {
+          if (f.mimeType === 'application/vnd.google-apps.folder') return true;
+          if (f.mimeType?.startsWith('audio/') || f.mimeType?.includes('zip') || f.mimeType?.includes('compressed')) return true;
+          const lower = (f.name || '').toLowerCase();
+          return audioExts.some(ext => lower.endsWith(ext));
+        });
+        setDriveFiles(filtered);
       }
     } catch (err: any) {
       console.error('Error fetching from Google Drive', err);
@@ -489,8 +542,8 @@ export default function MailerPage() {
           attachments: payload.attachments,
           accessToken: token,
           userToken,
-          senderEmail: session.user.email,
-          userId: session.user.id
+          senderEmail: session?.user?.email,
+          userId: session?.user?.id
         })
       });
 
