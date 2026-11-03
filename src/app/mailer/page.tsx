@@ -68,10 +68,18 @@ export default function MailerPage() {
   const [selectedAttachments, setSelectedAttachments] = useState<{name: string, link: string}[]>([]);
   
   // Google Drive
+  const [googleToken, setGoogleToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('beatlab_google_provider_token');
+    }
+    return null;
+  });
   const [driveFiles, setDriveFiles] = useState<any[]>([]);
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [driveError, setDriveError] = useState<string | null>(null);
   const [driveHistory, setDriveHistory] = useState<{id: string, name: string}[]>([{id: 'root', name: 'My Drive'}]);
+
+  const effectiveGoogleToken = session?.provider_token || googleToken;
 
   async function reconnectGoogleDrive() {
     await supabase.auth.signInWithOAuth({
@@ -98,12 +106,36 @@ export default function MailerPage() {
   const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
 
   useEffect(() => {
+    // If URL contains hash tokens from OAuth redirect
+    if (typeof window !== 'undefined' && window.location.hash) {
+      try {
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const pToken = hashParams.get('provider_token');
+        if (pToken) {
+          setGoogleToken(pToken);
+          localStorage.setItem('beatlab_google_provider_token', pToken);
+        }
+      } catch (e) {
+        console.error('Error parsing OAuth hash token:', e);
+      }
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      let token = session?.provider_token;
+      if (token) {
+        setGoogleToken(token);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('beatlab_google_provider_token', token);
+        }
+      } else if (typeof window !== 'undefined') {
+        token = localStorage.getItem('beatlab_google_provider_token');
+      }
+
       if (session?.user) {
         loadSupabaseBeats(session.user.id);
         setScheduledCampaigns(loadScheduledCampaigns(session.user.id));
-        if (session.provider_token) loadDriveFiles(session.provider_token, 'root');
+        if (token) loadDriveFiles(token, 'root');
         if (activeTab === 'stats') {
           fetchCampaignStats(session.user.id);
         }
@@ -112,9 +144,29 @@ export default function MailerPage() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+      if (event === 'SIGNED_OUT') {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('beatlab_google_provider_token');
+        }
+        setGoogleToken(null);
+        setCampaigns([]);
+        setSupabaseBeats([]);
+        return;
+      }
+
+      let token = session?.provider_token;
+      if (token) {
+        setGoogleToken(token);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('beatlab_google_provider_token', token);
+        }
+      } else if (typeof window !== 'undefined') {
+        token = localStorage.getItem('beatlab_google_provider_token');
+      }
+
       if (session?.user) {
         loadSupabaseBeats(session.user.id);
-        if (session.provider_token) loadDriveFiles(session.provider_token, 'root');
+        if (token) loadDriveFiles(token, 'root');
         if (activeTab === 'stats') {
           fetchCampaignStats(session.user.id);
         }
@@ -130,8 +182,8 @@ export default function MailerPage() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'stats' && session?.user?.id) {
-      fetchCampaignStats(session.user.id);
+    if (activeTab === 'stats') {
+      fetchCampaignStats(session?.user?.id);
     }
   }, [activeTab, session?.user?.id]);
 
@@ -157,7 +209,19 @@ export default function MailerPage() {
   }, [pendingDelete, undoSecondsLeft, session?.user?.id]);
 
   async function fetchCampaignStats(userId?: string) {
-    const targetUserId = userId || session?.user?.id;
+    let targetUserId = userId || session?.user?.id;
+    if (!targetUserId) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        targetUserId = sessionData?.session?.user?.id;
+        if (!targetUserId) {
+          const { data: userData } = await supabase.auth.getUser();
+          targetUserId = userData?.user?.id;
+        }
+      } catch (e) {
+        console.error('Error fetching user for stats:', e);
+      }
+    }
     if (!targetUserId) {
       setCampaigns([]);
       return;
@@ -171,12 +235,48 @@ export default function MailerPage() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        // If column user_id is not yet created or error occurs,
-        // NEVER expose other users' campaigns!
-        console.error('Error fetching user campaigns:', error);
+        // If joined query failed due to relationship cache, try fetching campaigns directly
+        console.error('Error fetching user campaigns joined:', error);
+        if (error.message?.includes('relationship') || error.message?.includes('schema cache')) {
+          const { data: campOnly, error: campErr } = await supabase
+            .from('campaigns')
+            .select('*')
+            .eq('user_id', targetUserId)
+            .order('created_at', { ascending: false });
+
+          if (!campErr && campOnly) {
+            const campIds = campOnly.map(c => c.id);
+            if (campIds.length > 0) {
+              const { data: logsData } = await supabase
+                .from('email_logs')
+                .select('id, campaign_id, recipient_email, opened, opened_at')
+                .in('campaign_id', campIds);
+
+              const logsMap: Record<string, any[]> = {};
+              (logsData || []).forEach(l => {
+                if (!logsMap[l.campaign_id]) logsMap[l.campaign_id] = [];
+                logsMap[l.campaign_id].push(l);
+              });
+              const merged = campOnly.map(c => ({ ...c, email_logs: logsMap[c.id] || [] }));
+              setCampaigns(merged);
+              setSelectedCampaign((prev: any) => (prev ? (merged.find(c => c.id === prev.id) || null) : null));
+              return;
+            }
+            setCampaigns(campOnly);
+            setSelectedCampaign((prev: any) => (prev ? (campOnly.find(c => c.id === prev.id) || null) : null));
+            return;
+          }
+        }
         setCampaigns([]);
       } else {
-        setCampaigns(data || []);
+        const list = data || [];
+        setCampaigns(list);
+        setSelectedCampaign((prev: any) => {
+          if (prev) {
+            return list.find(c => c.id === prev.id) || null;
+          }
+          return null;
+        });
       }
     } catch (err) {
       console.error('Campaign stats fetch error:', err);
@@ -232,7 +332,13 @@ export default function MailerPage() {
   }
 
   async function loadSupabaseBeats(userId?: string) {
-    const targetUserId = userId || session?.user?.id;
+    let targetUserId = userId || session?.user?.id;
+    if (!targetUserId) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        targetUserId = sessionData?.session?.user?.id;
+      } catch {}
+    }
     if (!targetUserId) {
       setSupabaseBeats([]);
       return;
@@ -246,6 +352,7 @@ export default function MailerPage() {
   }
 
   async function loadDriveFiles(token: string, folderId: string) {
+    if (!token) return;
     setLoadingDrive(true);
     setDriveError(null);
     try {
@@ -271,8 +378,9 @@ export default function MailerPage() {
   function handleDriveFolderClick(folderId: string, folderName: string) {
     const newHistory = [...driveHistory, {id: folderId, name: folderName}];
     setDriveHistory(newHistory);
-    if (session?.provider_token) {
-      loadDriveFiles(session.provider_token, folderId);
+    const token = effectiveGoogleToken;
+    if (token) {
+      loadDriveFiles(token, folderId);
     }
   }
 
@@ -281,8 +389,9 @@ export default function MailerPage() {
       const newHistory = driveHistory.slice(0, -1);
       setDriveHistory(newHistory);
       const parentFolderId = newHistory[newHistory.length - 1].id;
-      if (session?.provider_token) {
-        loadDriveFiles(session.provider_token, parentFolderId);
+      const token = effectiveGoogleToken;
+      if (token) {
+        loadDriveFiles(token, parentFolderId);
       }
     }
   }
@@ -313,18 +422,22 @@ export default function MailerPage() {
 
   const isAllSupabaseSelected =
     supabaseBeats.length > 0 &&
-    supabaseBeats.every(b => selectedAttachments.some(a => a.link === b.file_url));
+    supabaseBeats.every(b => {
+      const link = b.file_url || b.audio_url || b.url;
+      return link && selectedAttachments.some(a => a.link === link);
+    });
 
   function toggleSelectAllSupabase() {
     if (supabaseBeats.length === 0) return;
     if (isAllSupabaseSelected) {
-      const currentLinks = new Set(supabaseBeats.map(b => b.file_url));
+      const currentLinks = new Set(supabaseBeats.map(b => b.file_url || b.audio_url || b.url).filter(Boolean));
       setSelectedAttachments(selectedAttachments.filter(a => !currentLinks.has(a.link)));
     } else {
       const newItems = [...selectedAttachments];
       for (const b of supabaseBeats) {
-        if (!newItems.some(a => a.link === b.file_url)) {
-          newItems.push({ name: b.title, link: b.file_url });
+        const link = b.file_url || b.audio_url || b.url;
+        if (link && !newItems.some(a => a.link === link)) {
+          newItems.push({ name: b.title, link });
         }
       }
       setSelectedAttachments(newItems);
@@ -348,8 +461,9 @@ export default function MailerPage() {
     message: string;
     attachments: { name: string; link: string }[];
   }): Promise<{ success: boolean; error?: string }> {
-    if (!session?.provider_token) {
-      return { success: false, error: 'Session expired. Please log out and log in again.' };
+    const token = effectiveGoogleToken;
+    if (!token) {
+      return { success: false, error: 'Google account not connected. Please connect your Google account to send emails.' };
     }
 
     let userToken = session?.access_token;
@@ -373,7 +487,7 @@ export default function MailerPage() {
           subject: payload.subject, 
           message: payload.message,
           attachments: payload.attachments,
-          accessToken: session.provider_token,
+          accessToken: token,
           userToken,
           senderEmail: session.user.email,
           userId: session.user.id
@@ -393,7 +507,7 @@ export default function MailerPage() {
 
   // Automatic Background Worker for Scheduled Campaigns
   useEffect(() => {
-    if (!session?.provider_token || !session?.user?.id) return;
+    if (!effectiveGoogleToken || !session?.user?.id) return;
 
     const timer = setInterval(async () => {
       const stored = loadScheduledCampaigns(session.user.id);
@@ -429,12 +543,12 @@ export default function MailerPage() {
     }, 5000);
 
     return () => clearInterval(timer);
-  }, [session?.provider_token, session?.user?.id]);
+  }, [effectiveGoogleToken, session?.user?.id]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!session?.provider_token) {
-      setStatus('Error: Session expired. Please log out and log in again.');
+    if (!effectiveGoogleToken) {
+      await reconnectGoogleDrive();
       return;
     }
 
@@ -596,7 +710,10 @@ export default function MailerPage() {
           )}
         </button>
         <button 
-          onClick={() => setActiveTab('stats')}
+          onClick={() => {
+            setActiveTab('stats');
+            fetchCampaignStats(session?.user?.id);
+          }}
           className={`flex items-center pb-3 px-4 font-medium border-b-2 transition-colors ${activeTab === 'stats' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'}`}
         >
           <BarChart3 size={18} className="mr-2" /> Campaign Stats
@@ -606,10 +723,28 @@ export default function MailerPage() {
       {activeTab === 'send' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-7 bg-white border border-[#d2d2d7] rounded-xl p-6 shadow-sm">
-            {!session?.provider_token ? (
-              <div className="text-center py-12 text-red-600">Insufficient permissions. Please go to Account, log out, and log back in.</div>
-            ) : (
-              <form onSubmit={handleSend} className="space-y-6">
+            {!effectiveGoogleToken && (
+              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
+                    <Mail size={18} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900">Google Account not connected</p>
+                    <p className="text-xs text-amber-700">Connect your Google account with Gmail and Drive permissions to send email campaigns.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={reconnectGoogleDrive}
+                  className="shrink-0 px-3.5 py-2 bg-black hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <HardDrive size={14} />
+                  <span>Connect Google</span>
+                </button>
+              </div>
+            )}
+            <form onSubmit={handleSend} className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
                     <Users size={16} className="mr-1.5"/> Recipients (enter or comma)
@@ -785,12 +920,19 @@ export default function MailerPage() {
                   type="submit" 
                   disabled={sending} 
                   className={`w-full flex items-center justify-center font-medium py-3 px-4 rounded-lg text-sm transition-colors disabled:opacity-50 cursor-pointer ${
-                    isScheduled 
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' 
-                      : 'bg-black hover:bg-gray-800 text-white'
+                    !effectiveGoogleToken
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
+                      : isScheduled 
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' 
+                        : 'bg-black hover:bg-gray-800 text-white'
                   }`}
                 >
-                  {isScheduled ? (
+                  {!effectiveGoogleToken ? (
+                    <>
+                      <Mail size={18} className="mr-2" />
+                      <span>Connect Google Account to Send</span>
+                    </>
+                  ) : isScheduled ? (
                     <>
                       <Clock size={18} className="mr-2" />
                       <span>Schedule Campaign</span>
@@ -803,11 +945,10 @@ export default function MailerPage() {
                   )}
                 </button>
               </form>
-            )}
           </div>
 
           <div className="lg:col-span-5">
-            {session && session.provider_token && (
+            {session?.user && (
               <div className="bg-white border border-[#d2d2d7] rounded-xl p-0 shadow-sm flex flex-col h-[700px]">
                 <div className="p-4 border-b border-[#d2d2d7]">
                   <h3 className="font-semibold text-lg flex items-center mb-4"><Paperclip size={18} className="mr-2"/> Attachments</h3>
@@ -818,8 +959,9 @@ export default function MailerPage() {
                     <button 
                       onClick={() => {
                         setAttachmentSource('drive');
-                        if (session?.provider_token && driveFiles.length === 0 && !loadingDrive) {
-                          loadDriveFiles(session.provider_token, driveHistory[driveHistory.length - 1].id);
+                        const token = effectiveGoogleToken;
+                        if (token && driveFiles.length === 0 && !loadingDrive) {
+                          loadDriveFiles(token, driveHistory[driveHistory.length - 1].id);
                         }
                       }} 
                       className={`flex-1 flex items-center justify-center py-1.5 text-sm font-medium rounded-md transition-colors ${attachmentSource === 'drive' ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}
@@ -850,9 +992,10 @@ export default function MailerPage() {
                             </button>
                           </div>
                           {supabaseBeats.map(beat => {
-                            const isSelected = selectedAttachments.some(a => a.link === beat.file_url);
+                            const fileUrl = beat.file_url || beat.audio_url || beat.url || '';
+                            const isSelected = Boolean(fileUrl && selectedAttachments.some(a => a.link === fileUrl));
                             return (
-                              <div key={beat.id} onClick={() => toggleAttachment(beat.title, beat.file_url)} className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-200 border' : 'hover:bg-gray-50 border border-transparent'}`}>
+                              <div key={beat.id} onClick={() => fileUrl && toggleAttachment(beat.title, fileUrl)} className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-200 border' : 'hover:bg-gray-50 border border-transparent'}`}>
                                 <div className="flex-1 min-w-0">
                                   <p className={`text-sm font-medium truncate ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>{beat.title}</p>
                                 </div>
@@ -887,10 +1030,10 @@ export default function MailerPage() {
                               <span>{isAllDriveSelected ? 'Deselect All' : 'Select All'}</span>
                             </button>
                           )}
-                          {session?.provider_token && (
+                          {effectiveGoogleToken && (
                             <button
                               type="button"
-                              onClick={() => loadDriveFiles(session.provider_token!, driveHistory[driveHistory.length - 1].id)}
+                              onClick={() => loadDriveFiles(effectiveGoogleToken, driveHistory[driveHistory.length - 1].id)}
                               className="text-xs text-blue-600 hover:text-blue-800 font-medium px-1 py-1"
                               title="Refresh folder"
                             >
@@ -901,7 +1044,7 @@ export default function MailerPage() {
                       </div>
 
                       <div className="space-y-1 flex-1 overflow-y-auto">
-                        {!session?.provider_token || driveError ? (
+                        {!effectiveGoogleToken || driveError ? (
                           <div className="text-center py-8 px-4 flex flex-col items-center">
                             <HardDrive size={32} className="text-gray-400 mb-2" />
                             <p className="text-sm font-semibold text-gray-800 mb-1">

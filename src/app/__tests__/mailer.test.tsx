@@ -260,4 +260,33 @@ describe('Mailer Page (/mailer) Multi-Tenant Privacy & Isolation', () => {
       expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument();
     });
   });
+  it('renders Attachments panel and Beat Catalog even when provider_token is null', async () => {
+    localStorage.clear();
+    const mockSessionNoGoogle = {
+      user: mockUserA,
+      provider_token: null,
+    };
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: mockSessionNoGoogle },
+    });
+
+    mockOrder.mockResolvedValue({
+      data: [
+        { id: 'beat-x', title: 'Free Flowing Beat', file_url: 'https://example.com/free.mp3', user_id: mockUserA.id }
+      ],
+      error: null,
+    });
+
+    await act(async () => {
+      render(<MailerPage />);
+    });
+
+    expect(screen.getByRole('heading', { name: /Attachments/i })).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText('Free Flowing Beat')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Google Account not connected/i)).toBeInTheDocument();
+  });
 });
