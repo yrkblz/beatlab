@@ -14,7 +14,7 @@ export default function CookiePolicyPage() {
     <LegalLayout
       title="Cookie Policy"
       subtitle="Clear and transparent information about the cookies, tokens, and web storage technologies utilized on BeatHelper."
-      lastUpdated="October 10, 2026"
+      lastUpdated="October 28, 2026"
       activeTab="cookies"
     >
       <section className="space-y-4">
@@ -25,7 +25,7 @@ export default function CookiePolicyPage() {
           Cookies are small text files placed on your device (computer, tablet, or smartphone) by websites that you visit. They are widely used to make web applications function efficiently, secure user logins, and preserve user preferences across browsing sessions.
         </p>
         <p className="text-sm sm:text-base text-gray-600 leading-relaxed">
-          In addition to standard HTTP cookies, BeatHelper utilizes HTML5 Web Storage (&ldquo;Local Storage&rdquo;) to store user interface states and consent selections locally within your browser, ensuring fast and reliable performance without transmitting superfluous data on every network request.
+          In addition to standard HTTP cookies, BeatHelper utilizes HTML5 Web Storage (&ldquo;Local Storage&rdquo;) to store user interface states, active currency preferences, and Google OAuth session tokens locally within your browser, ensuring fast and reliable performance without transmitting superfluous data on every network request.
         </p>
       </section>
 
@@ -34,16 +34,16 @@ export default function CookiePolicyPage() {
           2. How BeatHelper Uses Cookies
         </h2>
         <p className="text-sm sm:text-base text-gray-600 leading-relaxed">
-          BeatHelper takes a minimalist, privacy-focused approach. We do not use third-party behavioral advertising cookies or cross-site tracking pixels. The technologies we use fall into two primary categories:
+          BeatHelper takes a minimalist, privacy-focused approach. We do not sell user data and we do not use third-party behavioral advertising cookies or cross-site tracking pixels. The technologies we use fall into two primary categories:
         </p>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
           <div className="p-5 rounded-2xl border border-gray-200 bg-gray-50/50">
             <h3 className="font-semibold text-gray-900 text-sm mb-2">
               Strictly Necessary (Essential)
             </h3>
             <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
-              Required for basic operation, authentication, and security. They verify your session token, protect against cross-site request forgery (CSRF), and remember your cookie consent preferences. Without these, the application cannot function properly.
+              Required for basic operation, authentication, and security. They verify your Supabase session token, maintain your Google OAuth sending token in browser storage, protect against cross-site request forgery (CSRF), and remember your cookie consent preferences. Without these, the application cannot function properly.
             </p>
           </div>
 
@@ -86,6 +86,13 @@ export default function CookiePolicyPage() {
                 <td className="py-3 px-4">Session / 1 Year</td>
               </tr>
               <tr>
+                <td className="py-3 px-4 font-mono font-medium text-gray-900">beatlab_google_provider_token</td>
+                <td className="py-3 px-4">Essential Storage</td>
+                <td className="py-3 px-4">BeatHelper</td>
+                <td className="py-3 px-4">Secure client-side token caching Google OAuth permissions for Gmail sending and Google Drive stems. Cleared upon logout.</td>
+                <td className="py-3 px-4">Persistent (until logout)</td>
+              </tr>
+              <tr>
                 <td className="py-3 px-4 font-mono font-medium text-gray-900">beathelper_cookie_consent</td>
                 <td className="py-3 px-4">Essential Storage</td>
                 <td className="py-3 px-4">BeatHelper</td>
@@ -103,7 +110,7 @@ export default function CookiePolicyPage() {
                 <td className="py-3 px-4 font-mono font-medium text-gray-900">studio_preferences</td>
                 <td className="py-3 px-4">Functional Storage</td>
                 <td className="py-3 px-4">BeatHelper</td>
-                <td className="py-3 px-4">Caches default studio filters, table column widths, and display settings.</td>
+                <td className="py-3 px-4">Caches default studio filters, currency choices, table column widths, and display settings.</td>
                 <td className="py-3 px-4">Persistent</td>
               </tr>
             </tbody>
@@ -152,6 +159,7 @@ export default function CookiePolicyPage() {
           <p className="font-semibold text-gray-900">BeatHelper Inc. — Privacy &amp; Data Compliance</p>
           <p>Email: <a href="mailto:beatlab.space@gmail.com" className="text-black underline font-medium">beatlab.space@gmail.com</a></p>
           <p>Legal: <a href="mailto:beatlab.space@gmail.com" className="text-black underline font-medium">beatlab.space@gmail.com</a></p>
+          <p>Data Deletion: <Link href="/data-deletion" className="text-black underline font-medium">https://beatlab.space/data-deletion</Link></p>
         </div>
       </section>
     </LegalLayout>

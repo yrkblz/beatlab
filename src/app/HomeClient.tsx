@@ -221,6 +221,9 @@ export function Dashboard({ user }: { user?: User | null }) {
           <Link href="/cookies" className="hover:text-black transition-colors">
             Cookie Policy
           </Link>
+          <Link href="/data-deletion" className="hover:text-black transition-colors">
+            Data Deletion
+          </Link>
         </div>
       </footer>
     </div>
@@ -976,6 +979,9 @@ export function LandingPage() {
             </Link>
             <Link href="/cookies" className="hover:text-black transition-colors">
               Cookie Policy
+            </Link>
+            <Link href="/data-deletion" className="hover:text-black transition-colors">
+              Data Deletion
             </Link>
           </div>
         </div>

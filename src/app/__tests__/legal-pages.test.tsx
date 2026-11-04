@@ -3,6 +3,7 @@ import { render, screen, within, act } from '@testing-library/react';
 import TermsPage, { metadata as termsMetadata } from '../terms/page';
 import PrivacyPage, { metadata as privacyMetadata } from '../privacy/page';
 import CookiesPage, { metadata as cookiesMetadata } from '../cookies/page';
+import DataDeletionPage, { metadata as dataDeletionMetadata } from '../data-deletion/page';
 import LoginPage from '../login/page';
 import AccountPage from '../account/page';
 import Home, { Dashboard } from '../page';
@@ -107,6 +108,25 @@ describe('Legal Compliance Pages and Footer Links', () => {
       expect(within(mobileNav).getByRole('link', { name: /^Privacy$/i })).toHaveAttribute('aria-current', 'page');
     });
   });
+
+
+    describe('Data Deletion Instructions (/data-deletion)', () => {
+      it('exports metadata for SEO and Meta App Review compliance', () => {
+        expect(dataDeletionMetadata.title).toContain('Data Deletion');
+        expect(dataDeletionMetadata.description).toBeDefined();
+      });
+
+      it('renders Meta/Instagram, Google, and TikTok data deletion instructions', () => {
+        render(<DataDeletionPage />);
+
+        expect(screen.getByRole('heading', { level: 1, name: /User Data Deletion Instructions/i })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /2\. Meta & Instagram Platform Data Deletion Instructions/i })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /3\. Google Account & Google API Data Deletion/i })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /4\. TikTok Developer Platform Data Deletion/i })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /5\. Complete Account Deletion & Data Erasure/i })).toBeInTheDocument();
+        expect(screen.getAllByText(/beatlab\.space@gmail\.com/i).length).toBeGreaterThan(0);
+      });
+    });
 
   describe('Cookie Policy (/cookies)', () => {
     it('exports metadata for SEO and compliance', () => {
@@ -227,6 +247,8 @@ describe('Legal Compliance Pages and Footer Links', () => {
         '/privacy',
         '/cookies',
         '/login',
+        '/data-deletion',
+        '/data-deletion/',
         '/terms/',
         '/privacy/',
         '/cookies/',

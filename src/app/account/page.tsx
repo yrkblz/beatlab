@@ -733,6 +733,10 @@ export default function AccountPage() {
           <Link href="/cookies" className="hover:text-black transition-colors">
             Cookie Policy
           </Link>
+          <span>•</span>
+          <Link href="/data-deletion" className="hover:text-black transition-colors">
+            Data Deletion
+          </Link>
         </div>
 
         {/* Modal Prompt When Trial Ends */}

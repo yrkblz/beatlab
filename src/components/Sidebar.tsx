@@ -116,6 +116,8 @@ export default function Sidebar() {
       normalizedPath.startsWith('/privacy/') ||
       normalizedPath === '/cookies' ||
       normalizedPath.startsWith('/cookies/') ||
+      normalizedPath === '/data-deletion' ||
+      normalizedPath.startsWith('/data-deletion/') ||
       normalizedPath === '/upgrade' ||
       normalizedPath.startsWith('/upgrade/') ||
       normalizedPath === '/checkout' ||
@@ -169,6 +171,8 @@ export default function Sidebar() {
     normalizedPath.startsWith('/privacy/') ||
     normalizedPath === '/cookies' ||
     normalizedPath.startsWith('/cookies/') ||
+    normalizedPath === '/data-deletion' ||
+    normalizedPath.startsWith('/data-deletion/') ||
     normalizedPath === '/upgrade' ||
     normalizedPath.startsWith('/upgrade/') ||
     normalizedPath === '/checkout' ||

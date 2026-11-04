@@ -6,7 +6,7 @@ interface LegalLayoutProps {
   title: string;
   subtitle: string;
   lastUpdated?: string;
-  activeTab: 'terms' | 'privacy' | 'cookies';
+  activeTab: 'terms' | 'privacy' | 'cookies' | 'data-deletion';
   children: React.ReactNode;
 }
 
@@ -33,6 +33,11 @@ export default function LegalLayout({
         return {
           icon: <Cookie size={14} className="text-gray-700" aria-hidden="true" />,
           label: 'Cookie Policy',
+        };
+      case 'data-deletion':
+        return {
+          icon: <Shield size={14} className="text-gray-700" aria-hidden="true" />,
+          label: 'Data Deletion Instructions',
         };
     }
   };
@@ -91,6 +96,17 @@ export default function LegalLayout({
             >
               Cookie Policy
             </Link>
+            <Link
+              href="/data-deletion"
+              aria-current={activeTab === 'data-deletion' ? 'page' : undefined}
+              className={`px-3 py-1.5 rounded-lg transition-colors ${
+                activeTab === 'data-deletion'
+                  ? 'bg-gray-100 text-gray-900 font-semibold'
+                  : 'text-gray-600 hover:text-black hover:bg-gray-50'
+              }`}
+            >
+              Data Deletion
+            </Link>
           </nav>
 
           <div className="flex items-center space-x-3 print:hidden">
@@ -132,6 +148,15 @@ export default function LegalLayout({
             }`}
           >
             Cookies
+          </Link>
+          <Link
+            href="/data-deletion"
+            aria-current={activeTab === 'data-deletion' ? 'page' : undefined}
+            className={`px-2.5 py-1 rounded-md transition-colors ${
+              activeTab === 'data-deletion' ? 'bg-gray-100 font-semibold text-gray-900' : 'text-gray-600'
+            }`}
+          >
+            Deletion
           </Link>
         </nav>
       </header>
@@ -180,6 +205,9 @@ export default function LegalLayout({
             </Link>
             <Link href="/cookies" className="hover:text-black transition-colors">
               Cookie Policy
+            </Link>
+            <Link href="/data-deletion" className="hover:text-black transition-colors">
+              Data Deletion
             </Link>
             <Link href="/" className="hover:text-black transition-colors">
               BeatHelper Home
