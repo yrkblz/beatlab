@@ -1,3 +1,4 @@
+import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
@@ -23,6 +24,14 @@ function extractYouTubeVideoId(inputUrl: string): string | null {
 
 export async function POST(request: Request) {
   try {
+    const clientIp = getClientIp(request);
+    const rate = checkRateLimit(`dl_mp3_${clientIp}`, 15, 60000);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: 'Too many download requests. Please wait a moment before trying again.' },
+        { status: 429, headers: { 'Retry-After': String(rate.resetSeconds) } }
+      );
+    }
     const { url } = await request.json();
     
     if (!url || typeof url !== 'string' || !url.includes('youtu')) {

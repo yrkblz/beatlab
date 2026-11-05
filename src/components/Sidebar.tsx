@@ -49,6 +49,11 @@ export default function Sidebar() {
         setUser(currentUser);
         setIsLoading(false);
         if (event === 'SIGNED_OUT') {
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.removeItem('beatlab_google_provider_token');
+            } catch {}
+          }
           router.push('/');
         } else if (currentUser) {
           // On auth change (like sign in), re-verify profile

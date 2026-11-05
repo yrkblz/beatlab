@@ -330,6 +330,11 @@ export default function AccountPage() {
 
   async function handleLogout() {
     setLoadingAuth(true);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('beatlab_google_provider_token');
+      } catch {}
+    }
     await supabase.auth.signOut();
     setLoadingAuth(false);
     router.push('/');

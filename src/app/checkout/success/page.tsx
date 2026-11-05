@@ -13,38 +13,69 @@ function SuccessContent() {
   const userId = searchParams.get('user_id');
 
   useEffect(() => {
-    async function activate() {
+    let isCancelled = false;
+
+    async function verifyAndActivate() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         const targetId = userId || user?.id;
 
-        if (targetId) {
-          // Ensure profile is marked as lifetime
-          await supabase
-            .from('profiles')
-            .update({
-              is_lifetime_paid: true,
-              paid_at: new Date().toISOString(),
-            })
-            .eq('id', targetId);
+        if (!targetId) {
+          setUpdating(false);
+          return;
+        }
 
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(
-              new CustomEvent('beatlab:profile-updated', {
-                detail: { is_lifetime_paid: true },
+        // 1. Verify if Stripe Webhook has already activated the account
+        let activated = false;
+        for (let attempt = 1; attempt <= 4; attempt++) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('is_lifetime_paid')
+            .eq('id', targetId)
+            .single();
+
+          if (profile?.is_lifetime_paid) {
+            activated = true;
+            break;
+          }
+
+          // If in local mock test simulation (no Stripe keys configured)
+          if (isMock && process.env.NODE_ENV !== 'production') {
+            await supabase
+              .from('profiles')
+              .update({
+                is_lifetime_paid: true,
+                paid_at: new Date().toISOString(),
               })
-            );
+              .eq('id', targetId);
+            activated = true;
+            break;
+          }
+
+          if (attempt < 4) {
+            await new Promise(r => setTimeout(r, 1200));
           }
         }
+
+        if (activated && typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('beatlab:profile-updated', {
+              detail: { is_lifetime_paid: true },
+            })
+          );
+        }
       } catch (err) {
-        console.error('Error activating lifetime plan:', err);
+        console.error('Verification error on checkout success:', err);
       } finally {
-        setUpdating(false);
+        if (!isCancelled) {
+          setUpdating(false);
+        }
       }
     }
 
-    activate();
-  }, [userId]);
+    verifyAndActivate();
+    return () => { isCancelled = true; };
+  }, [userId, isMock]);
 
   return (
     <div className="min-h-screen bg-[#fbfbfd] flex items-center justify-center p-4">

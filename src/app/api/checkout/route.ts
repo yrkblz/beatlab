@@ -1,8 +1,17 @@
+import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
 import { NextResponse } from 'next/server';
 import { stripe, LIFETIME_PRICE_CENTS } from '@/lib/stripe';
 
 export async function POST(req: Request) {
   try {
+    const clientIp = getClientIp(req);
+    const rate = checkRateLimit(`checkout_${clientIp}`, 15, 60000);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: 'Too many checkout requests. Please try again in a few moments.' },
+        { status: 429, headers: { 'Retry-After': String(rate.resetSeconds) } }
+      );
+    }
     const body = await req.json().catch(() => ({}));
     const { userId, userEmail } = body;
 

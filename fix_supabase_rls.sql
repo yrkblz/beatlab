@@ -131,6 +131,67 @@ DROP POLICY IF EXISTS "Allow authenticated write leads cache" ON public.instagra
 CREATE POLICY "Allow authenticated read leads cache" ON public.instagram_leads_cache FOR SELECT USING (true);
 CREATE POLICY "Allow authenticated write leads cache" ON public.instagram_leads_cache FOR ALL USING (true) WITH CHECK (true);
 
+
+-- 6. Tabela PROFILES (Mass Assignment & Privilege Escalation Protection)
+-- Zwykły użytkownik może aktualizować swoje imię, pseudonim, adres i walutę,
+-- ale uprawnienie UPDATE do is_lifetime_paid i danych Stripe jest odebrane od anon i authenticated.
+ALTER TABLE IF EXISTS public.profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
+CREATE POLICY "Users can view their own profile" 
+ON public.profiles FOR SELECT 
+USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
+CREATE POLICY "Users can update their own profile" 
+ON public.profiles FOR UPDATE 
+USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
+CREATE POLICY "Users can insert their own profile" 
+ON public.profiles FOR INSERT 
+WITH CHECK (auth.uid() = id);
+
+-- Zablokowanie nieautoryzowanego nadawania sobie darmowego Lifetime Access:
+REVOKE UPDATE (is_lifetime_paid, paid_at, stripe_customer_id, stripe_session_id) 
+ON public.profiles FROM authenticated, anon;
+
 -- ==============================================================================
--- Gotowe! Wszystkie tabele w projekcie mają teraz włączone RLS i są w 100% bezpieczne.
+
+-- 7. Tabela PLACEMENTS (CRM)
+ALTER TABLE IF EXISTS public.placements ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own placements" ON public.placements;
+DROP POLICY IF EXISTS "Users can insert their own placements" ON public.placements;
+DROP POLICY IF EXISTS "Users can update their own placements" ON public.placements;
+DROP POLICY IF EXISTS "Users can delete their own placements" ON public.placements;
+
+CREATE POLICY "Users can view their own placements" 
+ON public.placements FOR SELECT 
+USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own placements" 
+ON public.placements FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own placements" 
+ON public.placements FOR UPDATE 
+USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own placements" 
+ON public.placements FOR DELETE 
+USING (auth.uid() = user_id);
+
+-- 8. Global Safeguard: Włącz RLS na dosłownie KAŻDEJ istniejącej tabeli w publicznym schemacie,
+-- dzięki czemu Supabase Security Advisor natychmiast wyczyści wszystkie ostrzeżenia 'rls_disabled_in_public'.
+DO $$
+DECLARE
+    tbl RECORD;
+BEGIN
+    FOR tbl IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+        EXECUTE 'ALTER TABLE public.' || quote_ident(tbl.tablename) || ' ENABLE ROW LEVEL SECURITY;';
+    END LOOP;
+END $$;
+
+-- -- Gotowe! Wszystkie tabele w projekcie mają teraz włączone RLS i są w 100% bezpieczne.
 -- ==============================================================================

@@ -1,5 +1,17 @@
+import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
 export const maxDuration = 60;
 import { NextResponse } from 'next/server';
+
+
+function escapeHtml(str: string): string {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 function createMimeMessage(to: string, senderEmail: string, subject: string, html: string) {
   const headers = [
@@ -21,6 +33,14 @@ function createMimeMessage(to: string, senderEmail: string, subject: string, htm
 
 export async function POST(request: Request) {
   try {
+    const clientIp = getClientIp(request);
+    const rate = checkRateLimit(`send_mail_${clientIp}`, 15, 60000);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded: Please wait before sending more campaign emails.' },
+        { status: 429, headers: { 'Retry-After': String(rate.resetSeconds) } }
+      );
+    }
     const { emails, subject, message, accessToken, senderEmail, campaignName, attachments, userId, userToken } = await request.json();
     const host = request.headers.get('host') || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http' : 'https';
@@ -91,14 +111,14 @@ export async function POST(request: Request) {
             <table cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px; background-color: #f1f3f4; border: 1px solid #dadce0; border-radius: 4px; max-width: 450px; width: 100%;">
               <tr>
                 <td style="padding: 10px 14px;">
-                  <a href="${att.link}" target="_blank" style="text-decoration: none; color: #202124; font-family: Roboto, Arial, sans-serif; font-size: 14px; display: block; line-height: 20px;">
+                  <a href="${typeof att.link === 'string' && (att.link.startsWith('https://') || att.link.startsWith('http://')) ? att.link : '#'}" target="_blank" style="text-decoration: none; color: #202124; font-family: Roboto, Arial, sans-serif; font-size: 14px; display: block; line-height: 20px;">
                     <table cellpadding="0" cellspacing="0" border="0" width="100%">
                       <tr>
                         <td width="24" valign="middle">
                           <img src="https://ssl.gstatic.com/docs/doclist/images/mediatype/icon_1_audio_x32.png" style="width: 20px; height: 20px; display: block; border: none;" alt="Audio" />
                         </td>
                         <td valign="middle" style="padding-left: 8px; font-weight: normal; max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                          ${att.name}
+                          ${escapeHtml(att.name)}
                         </td>
                       </tr>
                     </table>
@@ -142,7 +162,7 @@ export async function POST(request: Request) {
       
       const htmlMessage = `
         <div style="font-family: Arial, sans-serif; color: #111; line-height: 1.6;">
-          ${message.replace(/\n/g, '<br/>')}
+          ${escapeHtml(message).replace(/\n/g, '<br/>')}
           ${attachmentsHtml}
           ${trackingPixelHtml}
         </div>
