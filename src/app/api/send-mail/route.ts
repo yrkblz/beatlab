@@ -1,3 +1,4 @@
+export const maxDuration = 60;
 import { NextResponse } from 'next/server';
 
 function createMimeMessage(to: string, senderEmail: string, subject: string, html: string) {
@@ -110,10 +111,17 @@ export async function POST(request: Request) {
       `;
     }
 
-    // 2. Dispatch emails and record tracking logs for each
+    // 2. Dispatch emails and record tracking logs for each with 1.5s delay to protect Gmail quota
     const isHttpsPublicOrigin = origin.startsWith('https://') && !origin.includes('localhost');
+    const delayMs = process.env.NODE_ENV === 'test' ? 10 : 1500;
 
-    for (const email of emails) {
+    for (let i = 0; i < emails.length; i++) {
+      const email = emails[i];
+
+      // 1.5s delay between emails to protect against Gmail API rate-limiting / quota burst errors
+      if (i > 0 && delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
       const logRes = await fetch(`${supabaseUrl}/rest/v1/email_logs`, {
         method: 'POST',
         headers: {

@@ -651,7 +651,7 @@ export default function MailerPage() {
     }
 
     setSending(true);
-    setStatus('Creating campaign and sending via Google API...');
+    setStatus('Creating campaign and sending via Google API (1.5s delay between recipients to protect quota)...');
     const result = await dispatchMail({
       emails: emailList,
       campaignName,
