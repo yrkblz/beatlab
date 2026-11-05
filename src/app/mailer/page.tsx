@@ -509,7 +509,7 @@ export default function MailerPage() {
 
   async function dispatchMail(payload: {
     emails: string[];
-    campaignName: string;
+    campaignName?: string;
     subject: string;
     message: string;
     attachments: { name: string; link: string }[];
@@ -527,35 +527,76 @@ export default function MailerPage() {
       }
     } catch {}
 
-    try {
-      const res = await fetch('/api/send-mail', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
-        },
-        body: JSON.stringify({ 
-          emails: payload.emails, 
-          campaignName: payload.campaignName,
-          subject: payload.subject, 
-          message: payload.message,
-          attachments: payload.attachments,
-          accessToken: token,
-          userToken,
-          senderEmail: session?.user?.email,
-          userId: session?.user?.id
-        })
-      });
+    const total = payload.emails.length;
+    let sharedCampaignId: string | undefined = undefined;
 
-      if (res.ok) {
-        return { success: true };
+    for (let i = 0; i < total; i++) {
+      const recipient = payload.emails[i];
+      if (i > 0) {
+        setStatus(`Wysyłanie: ${i + 1} z ${total} (${recipient}) - przerwa 1.5s...`);
+        await new Promise((r) => setTimeout(r, 1500));
       } else {
-        const data = await res.json();
-        return { success: false, error: data.error || 'Failed to send campaign emails.' };
+        setStatus(`Wysyłanie: 1 z ${total} (${recipient})...`);
       }
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Error connecting to the API server.' };
+
+      try {
+        const res = await fetch('/api/send-mail', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
+          },
+          body: JSON.stringify({ 
+            emails: [recipient], 
+            campaignName: payload.campaignName,
+            subject: payload.subject, 
+            message: payload.message,
+            attachments: payload.attachments,
+            accessToken: token,
+            userToken,
+            senderEmail: session?.user?.email,
+            userId: session?.user?.id,
+            campaignId: sharedCampaignId,
+            totalRecipients: total
+          })
+        });
+
+        const rawText = await res.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          if (res.status === 504 || rawText.includes('FUNCTION_INVOCATION_TIMEOUT') || rawText.includes('An error occurred')) {
+            return { 
+              success: false, 
+              error: `Przekroczono limit czasu serwera (Vercel Timeout 504) przy wysyłce do ${recipient}.` 
+            };
+          }
+          return { 
+            success: false, 
+            error: rawText.slice(0, 200) || `Błąd serwera (HTTP ${res.status}) przy wysyłce do ${recipient}.` 
+          };
+        }
+
+        if (!res.ok) {
+          return { 
+            success: false, 
+            error: data.error || `Błąd wysyłki do ${recipient} (HTTP ${res.status}).` 
+          };
+        }
+
+        if (data.campaignId && !sharedCampaignId) {
+          sharedCampaignId = data.campaignId;
+        }
+      } catch (err: any) {
+        return { 
+          success: false, 
+          error: err.message || `Błąd połączenia z serwerem przy wysyłce do ${recipient}.` 
+        };
+      }
     }
+
+    return { success: true };
   }
 
   // Automatic Background Worker for Scheduled Campaigns
@@ -955,7 +996,14 @@ export default function MailerPage() {
                   <div className={`p-4 rounded-lg text-sm font-medium border ${status.toLowerCase().includes('error') || status.toLowerCase().includes('failed') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <span className="break-words">{status}</span>
-                      {(status.toLowerCase().includes('token') || status.toLowerCase().includes('sesja') || status.toLowerCase().includes('session') || status.toLowerCase().includes('uprawnień') || status.toLowerCase().includes('reconnect')) && (
+                      {(
+                        (status.toLowerCase().includes('sesja') ||
+                         status.toLowerCase().includes('google token') ||
+                         status.toLowerCase().includes('reconnect google') ||
+                         status.toLowerCase().includes('uprawnień') ||
+                         status.toLowerCase().includes('invalid credentials')) ||
+                        (status.toLowerCase().includes('token') && !status.toLowerCase().includes('unexpected token'))
+                      ) && (
                         <button
                           type="button"
                           onClick={reconnectGoogleDrive}

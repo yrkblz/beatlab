@@ -1,7 +1,7 @@
-import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
-export const maxDuration = 60;
 import { NextResponse } from 'next/server';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
 
+export const maxDuration = 60;
 
 function escapeHtml(str: string): string {
   if (!str || typeof str !== 'string') return '';
@@ -34,20 +34,37 @@ function createMimeMessage(to: string, senderEmail: string, subject: string, htm
 export async function POST(request: Request) {
   try {
     const clientIp = getClientIp(request);
-    const rate = checkRateLimit(`send_mail_${clientIp}`, 15, 60000);
+    const rate = checkRateLimit(`send_mail_${clientIp}`, 120, 60000);
     if (!rate.allowed) {
       return NextResponse.json(
         { error: 'Rate limit exceeded: Please wait before sending more campaign emails.' },
         { status: 429, headers: { 'Retry-After': String(rate.resetSeconds) } }
       );
     }
-    const { emails, subject, message, accessToken, senderEmail, campaignName, attachments, userId, userToken } = await request.json();
+    const { 
+      emails, 
+      subject, 
+      message, 
+      accessToken, 
+      senderEmail, 
+      campaignName, 
+      attachments, 
+      userId, 
+      userToken, 
+      campaignId: incomingCampaignId, 
+      totalRecipients 
+    } = await request.json();
+
     const host = request.headers.get('host') || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const origin = `${protocol}://${host}`;
 
     if (!accessToken) {
       return NextResponse.json({ error: 'Missing Google access token. Please reconnect your Google account.' }, { status: 401 });
+    }
+
+    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      return NextResponse.json({ error: 'Please provide at least one recipient email.' }, { status: 400 });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -59,30 +76,19 @@ export async function POST(request: Request) {
     const userAuthToken = userToken || authHeaderFromReq;
     const authBearer = supabaseServiceKey || userAuthToken || supabaseAnonKey;
 
-    // 1. Save Campaign in Supabase (scoped to userId for user isolation)
-    const campaignBody: Record<string, any> = {
-      subject: campaignName || subject || 'Campaign',
-      total_sent: emails.length,
-    };
-    if (userId) {
-      campaignBody.user_id = userId;
-    }
+    let campaignId = incomingCampaignId;
 
-    let campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
-      method: 'POST',
-      headers: {
-        'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${authBearer}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify(campaignBody)
-    });
-    let campaignData = await campaignRes.json();
+    // 1. Save Campaign in Supabase only if not already provided
+    if (!campaignId) {
+      const campaignBody: Record<string, any> = {
+        subject: campaignName || subject || 'Campaign',
+        total_sent: totalRecipients || emails.length,
+      };
+      if (userId) {
+        campaignBody.user_id = userId;
+      }
 
-    // Graceful fallback if user_id column has not yet been added to Supabase table
-    if (!campaignRes.ok && campaignData?.message?.includes('user_id')) {
-      campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
+      let campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
         method: 'POST',
         headers: {
           'apikey': supabaseAnonKey,
@@ -90,16 +96,43 @@ export async function POST(request: Request) {
           'Content-Type': 'application/json',
           'Prefer': 'return=representation'
         },
-        body: JSON.stringify({ subject: campaignName || subject || 'Campaign', total_sent: emails.length })
+        body: JSON.stringify(campaignBody)
       });
-      campaignData = await campaignRes.json();
-    }
+      
+      const campaignText = await campaignRes.text();
+      let campaignData: any;
+      try {
+        campaignData = JSON.parse(campaignText);
+      } catch {
+        campaignData = null;
+      }
 
-    if (!campaignRes.ok || !campaignData || !campaignData[0]) {
-      throw new Error(campaignData?.message || 'Failed to create campaign in database');
-    }
+      // Graceful fallback if user_id column has not yet been added to Supabase table
+      if (!campaignRes.ok && campaignData?.message?.includes('user_id')) {
+        campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
+          method: 'POST',
+          headers: {
+            'apikey': supabaseAnonKey,
+            'Authorization': `Bearer ${authBearer}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ subject: campaignName || subject || 'Campaign', total_sent: totalRecipients || emails.length })
+        });
+        const retryText = await campaignRes.text();
+        try {
+          campaignData = JSON.parse(retryText);
+        } catch {
+          campaignData = null;
+        }
+      }
 
-    const campaignId = campaignData[0].id;
+      if (!campaignRes.ok || !campaignData || !campaignData[0]) {
+        throw new Error(campaignData?.message || 'Failed to create campaign in database');
+      }
+
+      campaignId = campaignData[0].id;
+    }
 
     // Prepare HTML block for attachments (similar to Google Drive attachment cards)
     let attachmentsHtml = '';
@@ -131,29 +164,33 @@ export async function POST(request: Request) {
       `;
     }
 
-    // 2. Dispatch emails and record tracking logs for each with 1.5s delay to protect Gmail quota
+    // 2. Dispatch emails and record tracking logs for each
     const isHttpsPublicOrigin = origin.startsWith('https://') && !origin.includes('localhost');
-    const delayMs = process.env.NODE_ENV === 'test' ? 10 : 1500;
+    const delayMs = process.env.NODE_ENV === 'test' ? 10 : (emails.length > 1 ? 50 : 0);
 
     for (let i = 0; i < emails.length; i++) {
       const email = emails[i];
 
-      // 1.5s delay between emails to protect against Gmail API rate-limiting / quota burst errors
       if (i > 0 && delayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-      const logRes = await fetch(`${supabaseUrl}/rest/v1/email_logs`, {
-        method: 'POST',
-        headers: {
-          'apikey': supabaseAnonKey,
-          'Authorization': `Bearer ${authBearer}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation'
-        },
-        body: JSON.stringify({ campaign_id: campaignId, recipient_email: email })
-      });
-      const logData = await logRes.json();
-      const logId = logData?.[0]?.id;
+
+      let logId: string | undefined = undefined;
+      try {
+        const logRes = await fetch(`${supabaseUrl}/rest/v1/email_logs`, {
+          method: 'POST',
+          headers: {
+            'apikey': supabaseAnonKey,
+            'Authorization': `Bearer ${authBearer}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ campaign_id: campaignId, recipient_email: email })
+        });
+        const logText = await logRes.text();
+        const logData = JSON.parse(logText);
+        logId = logData?.[0]?.id;
+      } catch {}
 
       // Tracking pixel: only use on secure public domains so local test servers don't trigger spam filters
       const trackingPixelHtml = (isHttpsPublicOrigin && logId)
