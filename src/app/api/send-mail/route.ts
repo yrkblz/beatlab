@@ -3,6 +3,17 @@ import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
 
 export const maxDuration = 60;
 
+function sanitizeEmail(raw: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  let cleaned = raw.replace(/[\u00A0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff\u200b-\u200d]/g, '').trim();
+  const match = cleaned.match(/<([^>]+)>/);
+  if (match) cleaned = match[1].trim();
+  cleaned = cleaned.replace(/^mailto:/i, '').replace(/^[<"'(\[]+|[>"')\]]+$/g, '').trim();
+  cleaned = cleaned.replace(/[.,;:]+$/, '').trim();
+  cleaned = cleaned.replace(/\s+/g, '');
+  return cleaned;
+}
+
 function escapeHtml(str: string): string {
   if (!str || typeof str !== 'string') return '';
   return str
@@ -169,7 +180,11 @@ export async function POST(request: Request) {
     const delayMs = process.env.NODE_ENV === 'test' ? 10 : (emails.length > 1 ? 50 : 0);
 
     for (let i = 0; i < emails.length; i++) {
-      const email = emails[i];
+      const rawEmail = emails[i];
+      const email = sanitizeEmail(rawEmail);
+      if (!email || !email.includes('@') || !email.includes('.')) {
+        throw new Error(`Nieprawidłowy format adresu odbiorcy: "${rawEmail}". Sprawdź, czy adres jest poprawny.`);
+      }
 
       if (i > 0 && delayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -234,6 +249,8 @@ export async function POST(request: Request) {
           userFriendlyMsg = 'Brak uprawnień do wysyłania (scope gmail.send). Kliknij "Reconnect Google Account" i zaznacz wszystkie zgody Google.';
         } else if (gmailRes.status === 429 || parsedError.toLowerCase().includes('quota') || parsedError.toLowerCase().includes('rate limit')) {
           userFriendlyMsg = 'Przekroczono limit wysyłki konta Gmail (Gmail daily quota). Spróbuj ponownie za kilka godzin.';
+        } else if (parsedError.toLowerCase().includes('invalid to header') || parsedError.toLowerCase().includes('invalid to')) {
+          userFriendlyMsg = `Nieprawidłowy format adresu odbiorcy: "${email}". Sprawdź, czy nie ma w nim literówki lub spacji.`;
         }
 
         throw new Error(userFriendlyMsg);

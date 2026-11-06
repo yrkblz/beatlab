@@ -46,6 +46,36 @@ function saveScheduledCampaigns(items: ScheduledCampaign[], userId?: string) {
   }
 }
 
+
+function sanitizeEmail(raw: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  let cleaned = raw.replace(/[\u00A0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff\u200b-\u200d]/g, '').trim();
+  const match = cleaned.match(/<([^>]+)>/);
+  if (match) cleaned = match[1].trim();
+  cleaned = cleaned.replace(/^mailto:/i, '').replace(/^[<"'(\[]+|[>"')\]]+$/g, '').trim();
+  cleaned = cleaned.replace(/[.,;:]+$/, '').trim();
+  cleaned = cleaned.replace(/\s+/g, '');
+  return cleaned;
+}
+
+function parseEmailList(rawInput: string): string[] {
+  if (!rawInput) return [];
+  const tokens = rawInput.split(/[\r\n,;\t]+|\s{2,}/);
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const token of tokens) {
+    const cleaned = sanitizeEmail(token);
+    if (cleaned && cleaned.includes('@') && cleaned.includes('.')) {
+      const lower = cleaned.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        result.push(cleaned);
+      }
+    }
+  }
+  return result;
+}
+
 export default function MailerPage() {
   const [activeTab, setActiveTab] = useState<'send' | 'scheduled' | 'stats'>('send');
   const [scheduledCampaigns, setScheduledCampaigns] = useState<ScheduledCampaign[]>([]);
@@ -531,7 +561,8 @@ export default function MailerPage() {
     let sharedCampaignId: string | undefined = undefined;
 
     for (let i = 0; i < total; i++) {
-      const recipient = payload.emails[i];
+      const rawRecipient = payload.emails[i];
+      const recipient = sanitizeEmail(rawRecipient);
       if (i > 0) {
         setStatus(`Wysyłanie: ${i + 1} z ${total} (${recipient}) - przerwa 1.5s...`);
         await new Promise((r) => setTimeout(r, 1500));
@@ -646,7 +677,7 @@ export default function MailerPage() {
       return;
     }
 
-    const emailList = emails.split(/[\n,]+/).map(e => e.trim()).filter(e => e.includes('@'));
+    const emailList = parseEmailList(emails);
     if (emailList.length === 0) {
       setStatus('Error: Please provide at least one valid email address.');
       return;
