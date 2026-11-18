@@ -571,26 +571,46 @@ export default function MailerPage() {
       }
 
       try {
-        const res = await fetch('/api/send-mail', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
-          },
-          body: JSON.stringify({ 
-            emails: [recipient], 
-            campaignName: payload.campaignName,
-            subject: payload.subject, 
-            message: payload.message,
-            attachments: payload.attachments,
-            accessToken: token,
-            userToken,
-            senderEmail: session?.user?.email,
-            userId: session?.user?.id,
-            campaignId: sharedCampaignId,
-            totalRecipients: total
-          })
+        const mailBody = JSON.stringify({ 
+          emails: [recipient], 
+          campaignName: payload.campaignName,
+          subject: payload.subject, 
+          message: payload.message,
+          attachments: payload.attachments,
+          accessToken: token,
+          userToken,
+          senderEmail: session?.user?.email,
+          userId: session?.user?.id,
+          campaignId: sharedCampaignId,
+          totalRecipients: total
         });
+        const mailHeaders: Record<string, string> = { 
+          'Content-Type': 'application/json',
+          ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {})
+        };
+
+        // Prefer /api/campaigns/dispatch to bypass adblockers targeting "send-mail", fallback to /api/send-mail
+        let res: Response;
+        try {
+          res = await fetch('/api/campaigns/dispatch', {
+            method: 'POST',
+            headers: mailHeaders,
+            body: mailBody
+          });
+          if (res.status === 404) {
+            res = await fetch('/api/send-mail', {
+              method: 'POST',
+              headers: mailHeaders,
+              body: mailBody
+            });
+          }
+        } catch {
+          res = await fetch('/api/send-mail', {
+            method: 'POST',
+            headers: mailHeaders,
+            body: mailBody
+          });
+        }
 
         const rawText = await res.text();
         let data: any = {};
@@ -620,9 +640,14 @@ export default function MailerPage() {
           sharedCampaignId = data.campaignId;
         }
       } catch (err: any) {
+        const msg = err?.message || '';
+        let friendly = msg;
+        if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed')) {
+          friendly = 'Błąd sieci (Failed to fetch). Sprawdź połączenie z internetem lub wyłącz AdBlocka / Brave Shields dla tej strony.';
+        }
         return { 
           success: false, 
-          error: err.message || `Błąd połączenia z serwerem przy wysyłce do ${recipient}.` 
+          error: friendly || `Błąd połączenia z serwerem przy wysyłce do ${recipient}.` 
         };
       }
     }
