@@ -260,6 +260,48 @@ describe('Mailer Page (/mailer) Multi-Tenant Privacy & Isolation', () => {
       expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument();
     });
   });
+  
+  it('displays checkpoint banner and remaining emails when an interrupted campaign exists in storage', async () => {
+    localStorage.clear();
+    const mockSession = {
+      user: mockUserA,
+      provider_token: 'google-token-123',
+    };
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: mockSession },
+    });
+
+    mockOrder.mockResolvedValue({ data: [], error: null });
+
+    // Seed a checkpoint in localStorage
+    const savedCheckpoint = {
+      id: 'cp_test_1',
+      campaignName: 'Summer Pack 2026',
+      subject: 'New Beats for You',
+      message: 'Listen to my track',
+      attachments: [],
+      totalOriginal: 50,
+      sentCount: 24,
+      failedRecipient: 'artist25@gmail.com',
+      remainingEmails: ['artist25@gmail.com', 'artist26@gmail.com'],
+      error: 'Przekroczono limit wysyłki konta Gmail (Gmail daily quota).',
+      failedAt: new Date().toISOString(),
+      userId: mockUserA.id
+    };
+    localStorage.setItem(`beatlab_mailer_checkpoint_${mockUserA.id}`, JSON.stringify(savedCheckpoint));
+
+    await act(async () => {
+      render(<MailerPage />);
+    });
+
+    // Check that checkpoint banner renders
+    expect(screen.getByText(/Zapisana niedokończona wysyłka/i)).toBeInTheDocument();
+    expect(screen.getByText(/24 \/ 50/i)).toBeInTheDocument();
+    expect(screen.getByText(/artist25@gmail.com/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Wznów wysyłkę pozostałych \(2\)/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Wczytaj do formularza/i })).toBeInTheDocument();
+  });
+
   it('renders Attachments panel and Beat Catalog even when provider_token is null', async () => {
     localStorage.clear();
     const mockSessionNoGoogle = {

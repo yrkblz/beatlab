@@ -76,6 +76,52 @@ function parseEmailList(rawInput: string): string[] {
   return result;
 }
 
+
+export interface CampaignCheckpoint {
+  id: string;
+  campaignName: string;
+  subject: string;
+  message: string;
+  attachments: { name: string; link: string }[];
+  totalOriginal: number;
+  sentCount: number;
+  failedRecipient: string;
+  remainingEmails: string[];
+  error: string;
+  failedAt: string;
+  campaignId?: string;
+  userId?: string;
+}
+
+function getCheckpointStorageKey(userId?: string) {
+  return userId ? `beatlab_mailer_checkpoint_${userId}` : 'beatlab_mailer_checkpoint';
+}
+
+function loadCheckpoint(userId?: string): CampaignCheckpoint | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(getCheckpointStorageKey(userId));
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error loading mailer checkpoint:', e);
+  }
+  return null;
+}
+
+function saveCheckpoint(checkpoint: CampaignCheckpoint | null, userId?: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = getCheckpointStorageKey(userId);
+    if (!checkpoint) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, JSON.stringify(checkpoint));
+    }
+  } catch (e) {
+    console.error('Error saving mailer checkpoint:', e);
+  }
+}
+
 export default function MailerPage() {
   const [activeTab, setActiveTab] = useState<'send' | 'scheduled' | 'stats'>('send');
   const [scheduledCampaigns, setScheduledCampaigns] = useState<ScheduledCampaign[]>([]);
@@ -91,6 +137,17 @@ export default function MailerPage() {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState('');
+  const [checkpoint, setCheckpoint] = useState<CampaignCheckpoint | null>(null);
+  const [copiedNotice, setCopiedNotice] = useState(false);
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      const saved = loadCheckpoint(session.user.id);
+      if (saved) {
+        setCheckpoint(saved);
+      }
+    }
+  }, [session?.user?.id]);
 
   // Attachments
   const [attachmentSource, setAttachmentSource] = useState<'supabase' | 'drive'>('supabase');
@@ -543,10 +600,25 @@ export default function MailerPage() {
     subject: string;
     message: string;
     attachments: { name: string; link: string }[];
-  }): Promise<{ success: boolean; error?: string }> {
+    campaignId?: string;
+    initialSentCount?: number;
+    totalOriginal?: number;
+  }): Promise<{ 
+    success: boolean; 
+    error?: string;
+    sentCount: number;
+    failedRecipient?: string;
+    remainingEmails: string[];
+    campaignId?: string;
+  }> {
     const token = effectiveGoogleToken;
     if (!token) {
-      return { success: false, error: 'Google account not connected. Please connect your Google account to send emails.' };
+      return { 
+        success: false, 
+        error: 'Google account not connected. Please connect your Google account to send emails.',
+        sentCount: 0,
+        remainingEmails: payload.emails 
+      };
     }
 
     let userToken = session?.access_token;
@@ -558,16 +630,20 @@ export default function MailerPage() {
     } catch {}
 
     const total = payload.emails.length;
-    let sharedCampaignId: string | undefined = undefined;
+    const totalOverall = payload.totalOriginal || total;
+    let sharedCampaignId: string | undefined = payload.campaignId;
+    let successfulCount = payload.initialSentCount || 0;
 
     for (let i = 0; i < total; i++) {
       const rawRecipient = payload.emails[i];
       const recipient = sanitizeEmail(rawRecipient);
-      if (i > 0) {
-        setStatus(`Wysyłanie: ${i + 1} z ${total} (${recipient}) - przerwa 1.5s...`);
+      const currentOverallIndex = successfulCount + 1;
+
+      if (i > 0 || successfulCount > 0) {
+        setStatus(`Wysyłanie: ${currentOverallIndex} z ${totalOverall} (${recipient}) - przerwa 1.5s...`);
         await new Promise((r) => setTimeout(r, 1500));
       } else {
-        setStatus(`Wysyłanie: 1 z ${total} (${recipient})...`);
+        setStatus(`Wysyłanie: ${currentOverallIndex} z ${totalOverall} (${recipient})...`);
       }
 
       try {
@@ -582,7 +658,7 @@ export default function MailerPage() {
           senderEmail: session?.user?.email,
           userId: session?.user?.id,
           campaignId: sharedCampaignId,
-          totalRecipients: total
+          totalRecipients: totalOverall
         });
         const mailHeaders: Record<string, string> = { 
           'Content-Type': 'application/json',
@@ -618,27 +694,42 @@ export default function MailerPage() {
           data = JSON.parse(rawText);
         } catch {
           if (res.status === 504 || rawText.includes('FUNCTION_INVOCATION_TIMEOUT') || rawText.includes('An error occurred')) {
+            const err = `Przekroczono limit czasu serwera (Vercel Timeout 504) przy wysyłce do ${recipient}.`;
             return { 
               success: false, 
-              error: `Przekroczono limit czasu serwera (Vercel Timeout 504) przy wysyłce do ${recipient}.` 
+              error: err,
+              sentCount: successfulCount,
+              failedRecipient: recipient,
+              remainingEmails: payload.emails.slice(i),
+              campaignId: sharedCampaignId
             };
           }
+          const err = rawText.slice(0, 200) || `Błąd serwera (HTTP ${res.status}) przy wysyłce do ${recipient}.`;
           return { 
             success: false, 
-            error: rawText.slice(0, 200) || `Błąd serwera (HTTP ${res.status}) przy wysyłce do ${recipient}.` 
+            error: err,
+            sentCount: successfulCount,
+            failedRecipient: recipient,
+            remainingEmails: payload.emails.slice(i),
+            campaignId: sharedCampaignId
           };
         }
 
         if (!res.ok) {
           return { 
             success: false, 
-            error: data.error || `Błąd wysyłki do ${recipient} (HTTP ${res.status}).` 
+            error: data.error || `Błąd wysyłki do ${recipient} (HTTP ${res.status}).`,
+            sentCount: successfulCount,
+            failedRecipient: recipient,
+            remainingEmails: payload.emails.slice(i),
+            campaignId: sharedCampaignId
           };
         }
 
         if (data.campaignId && !sharedCampaignId) {
           sharedCampaignId = data.campaignId;
         }
+        successfulCount++;
       } catch (err: any) {
         const msg = err?.message || '';
         let friendly = msg;
@@ -647,12 +738,21 @@ export default function MailerPage() {
         }
         return { 
           success: false, 
-          error: friendly || `Błąd połączenia z serwerem przy wysyłce do ${recipient}.` 
+          error: friendly || `Błąd połączenia z serwerem przy wysyłce do ${recipient}.`,
+          sentCount: successfulCount,
+          failedRecipient: recipient,
+          remainingEmails: payload.emails.slice(i),
+          campaignId: sharedCampaignId
         };
       }
     }
 
-    return { success: true };
+    return { 
+      success: true, 
+      sentCount: successfulCount,
+      remainingEmails: [],
+      campaignId: sharedCampaignId 
+    };
   }
 
   // Automatic Background Worker for Scheduled Campaigns
@@ -685,7 +785,8 @@ export default function MailerPage() {
           fetchCampaignStats(session.user.id);
         } else {
           due.status = 'failed';
-          due.error = res.error;
+          due.emails = res.remainingEmails && res.remainingEmails.length > 0 ? res.remainingEmails : due.emails;
+          due.error = `Wysłano ${res.sentCount}. Zatrzymano na: ${res.failedRecipient || 'błąd'}: ${res.error}`;
           saveScheduledCampaigns(stored, session.user.id);
           setScheduledCampaigns([...stored]);
         }
@@ -764,9 +865,28 @@ export default function MailerPage() {
       setCampaignName('');
       setMessage('');
       setSelectedAttachments([]);
-      fetchCampaignStats(session.user.id);
+      setCheckpoint(null);
+      saveCheckpoint(null, session?.user?.id);
+      fetchCampaignStats(session?.user?.id);
     } else {
-      setStatus(`Sending error: ${result.error}`);
+      const newCheckpoint: CampaignCheckpoint = {
+        id: `cp_${Date.now()}`,
+        campaignName: campaignName.trim() || subject.trim() || 'Untitled Campaign',
+        subject: subject.trim(),
+        message,
+        attachments: selectedAttachments,
+        totalOriginal: emailList.length,
+        sentCount: result.sentCount,
+        failedRecipient: result.failedRecipient || 'Nieznany',
+        remainingEmails: result.remainingEmails,
+        error: result.error || 'Nieznany błąd',
+        failedAt: new Date().toISOString(),
+        campaignId: result.campaignId,
+        userId: session?.user?.id
+      };
+      setCheckpoint(newCheckpoint);
+      saveCheckpoint(newCheckpoint, session?.user?.id);
+      setStatus(`Sending error: ${result.error} (Wysłano: ${result.sentCount} z ${emailList.length}. Zatrzymano na: ${result.failedRecipient})`);
     }
     setSending(false);
   }
@@ -794,10 +914,78 @@ export default function MailerPage() {
       setScheduledNotice(`Campaign "${item.campaignName}" has been sent successfully!`);
       fetchCampaignStats(session?.user?.id);
     } else {
-      const failed = scheduledCampaigns.map(c => c.id === id ? { ...c, status: 'failed' as const, error: res.error } : c);
+      const remaining = res.remainingEmails && res.remainingEmails.length > 0 ? res.remainingEmails : item.emails;
+      const failed = scheduledCampaigns.map(c => c.id === id ? { 
+        ...c, 
+        status: 'failed' as const, 
+        emails: remaining,
+        error: `Wysłano ${res.sentCount} z ${item.emails.length}. Zatrzymano na: ${res.failedRecipient || 'błąd'}: ${res.error}` 
+      } : c);
       setScheduledCampaigns(failed);
       saveScheduledCampaigns(failed, session?.user?.id);
     }
+  }
+
+
+  async function handleResumeCheckpoint() {
+    if (!checkpoint || checkpoint.remainingEmails.length === 0) return;
+    setSending(true);
+    setStatus(`Wznawianie wysyłki od: ${checkpoint.failedRecipient} (pozostało ${checkpoint.remainingEmails.length} z ${checkpoint.totalOriginal})...`);
+
+    const result = await dispatchMail({
+      emails: checkpoint.remainingEmails,
+      campaignName: checkpoint.campaignName,
+      subject: checkpoint.subject,
+      message: checkpoint.message,
+      attachments: checkpoint.attachments,
+      campaignId: checkpoint.campaignId,
+      initialSentCount: checkpoint.sentCount,
+      totalOriginal: checkpoint.totalOriginal
+    });
+
+    if (result.success) {
+      setStatus(`Sukces! Dokończono wysyłkę kampanii "${checkpoint.campaignName}" do wszystkich ${checkpoint.totalOriginal} odbiorców.`);
+      setCheckpoint(null);
+      saveCheckpoint(null, session?.user?.id);
+      fetchCampaignStats(session?.user?.id);
+    } else {
+      const updatedCp: CampaignCheckpoint = {
+        ...checkpoint,
+        sentCount: result.sentCount,
+        failedRecipient: result.failedRecipient || checkpoint.failedRecipient,
+        remainingEmails: result.remainingEmails,
+        error: result.error || checkpoint.error,
+        failedAt: new Date().toISOString(),
+        campaignId: result.campaignId || checkpoint.campaignId
+      };
+      setCheckpoint(updatedCp);
+      saveCheckpoint(updatedCp, session?.user?.id);
+      setStatus(`Sending error: ${result.error} (Wysłano: ${result.sentCount} z ${checkpoint.totalOriginal}. Zatrzymano na: ${result.failedRecipient})`);
+    }
+    setSending(false);
+  }
+
+  function handleLoadRemainingToForm() {
+    if (!checkpoint) return;
+    setEmails(checkpoint.remainingEmails.join('\n'));
+    if (checkpoint.campaignName) setCampaignName(checkpoint.campaignName);
+    if (checkpoint.subject) setSubject(checkpoint.subject);
+    if (checkpoint.message) setMessage(checkpoint.message);
+    if (checkpoint.attachments) setSelectedAttachments(checkpoint.attachments);
+    setStatus(`Wczytano do formularza ${checkpoint.remainingEmails.length} pozostałych niewysłanych adresów.`);
+  }
+
+  function handleCopyRemaining() {
+    if (!checkpoint) return;
+    navigator.clipboard.writeText(checkpoint.remainingEmails.join('\n'));
+    setCopiedNotice(true);
+    setTimeout(() => setCopiedNotice(false), 3000);
+  }
+
+  function handleDiscardCheckpoint() {
+    setCheckpoint(null);
+    saveCheckpoint(null, session?.user?.id);
+    setStatus('Odrzucono zapisaną pozycję przerwanej wysyłki.');
   }
 
   function deleteScheduledItem(id: string) {
@@ -1047,6 +1235,74 @@ export default function MailerPage() {
                     </div>
                   )}
                 </div>
+
+                                {checkpoint && (
+                  <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 shadow-sm transition-all animate-in fade-in">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <div className="font-semibold text-sm text-amber-950 flex items-center gap-2 flex-wrap">
+                            <span>Zapisana niedokończona wysyłka</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-mono">
+                              Wysłano: {checkpoint.sentCount} / {checkpoint.totalOriginal}
+                            </span>
+                          </div>
+                          <p className="text-xs text-amber-900 mt-1">
+                            Kampania: <strong className="font-semibold">{checkpoint.campaignName || checkpoint.subject}</strong>
+                          </p>
+                          <p className="text-xs text-amber-800 mt-0.5 break-all">
+                            Zatrzymano na adresie: <span className="font-mono font-medium underline">{checkpoint.failedRecipient}</span>
+                          </p>
+                          <p className="text-xs text-amber-700 mt-0.5">
+                            Powód: <span className="italic">{checkpoint.error}</span>
+                          </p>
+                          <p className="text-xs font-medium text-amber-900 mt-1">
+                            Pozostało do wysłania: <strong>{checkpoint.remainingEmails.length} adresów</strong> (z {checkpoint.totalOriginal})
+                          </p>
+                        </div>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={handleDiscardCheckpoint}
+                        title="Odrzuć punkt wznowienia"
+                        className="text-amber-600 hover:text-amber-800 p-1.5 rounded-md hover:bg-amber-100 transition-colors shrink-0 cursor-pointer"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-amber-200">
+                      <button
+                        type="button"
+                        disabled={sending}
+                        onClick={handleResumeCheckpoint}
+                        className="px-3.5 py-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                      >
+                        <Send size={13} />
+                        Wznów wysyłkę pozostałych ({checkpoint.remainingEmails.length})
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleLoadRemainingToForm}
+                        className="px-3 py-1.5 text-xs font-medium bg-white hover:bg-amber-100/50 text-amber-900 border border-amber-300 rounded-lg shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Folder size={13} />
+                        Wczytaj do formularza
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCopyRemaining}
+                        className="px-3 py-1.5 text-xs font-medium bg-white hover:bg-amber-100/50 text-amber-900 border border-amber-300 rounded-lg shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <CheckSquare size={13} />
+                        {copiedNotice ? 'Skopiowano do schowka!' : `Kopiuj niewysłane (${checkpoint.remainingEmails.length})`}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {status && (
                   <div className={`p-4 rounded-lg text-sm font-medium border ${status.toLowerCase().includes('error') || status.toLowerCase().includes('failed') ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
@@ -1368,6 +1624,16 @@ export default function MailerPage() {
                         >
                           <Send size={12} />
                           <span>Send Now</span>
+                        </button>
+                      )}
+                      {item.status === 'failed' && (
+                        <button
+                          type="button"
+                          onClick={() => triggerScheduledNow(item.id)}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <RefreshCw size={12} />
+                          <span>Wznów ({item.emails.length})</span>
                         </button>
                       )}
                       <button
