@@ -30,6 +30,7 @@ export interface LeadItem {
   email?: string;
   videoTitle: string;
   videoUrl: string;
+  viewCount?: number;
   isPastDuplicate?: boolean;
 }
 
@@ -45,6 +46,7 @@ export const LEADS_STORAGE_KEY = 'beatlab_discovered_leads_history';
 export default function LeadsPage() {
   const [query, setQuery] = useState('');
   const [maxResults, setMaxResults] = useState<number>(50);
+  const [minViews, setMinViews] = useState<number>(10000);
   const [onlyUnique, setOnlyUnique] = useState<boolean>(false);
 
   const [rawResults, setRawResults] = useState<LeadItem[]>([]);
@@ -100,6 +102,7 @@ export default function LeadsPage() {
       const payload: Record<string, any> = {
         query: query.trim(),
         maxResults,
+        minViews,
       };
 
       if (onlyUnique && history.length > 0) {
@@ -181,6 +184,7 @@ export default function LeadsPage() {
       const payload: Record<string, any> = {
         query: query.trim(),
         maxResults,
+        minViews,
         pageToken: nextPageToken,
       };
 
@@ -355,29 +359,63 @@ export default function LeadsPage() {
             </button>
           </div>
 
-          {/* Search Controls Toolbar: Scan count & Unique toggle */}
+          {/* Search Controls Toolbar: Scan count, Min views & Unique toggle */}
           <div className="pt-3 border-t border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4 text-sm">
-            {/* Quantity Selector */}
-            <div className="flex items-center gap-2.5">
-              <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5 shrink-0">
-                <SlidersHorizontal size={14} className="text-gray-400" />
-                Videos to scan:
-              </span>
-              <div className="inline-flex flex-wrap rounded-xl p-1 bg-gray-100 border border-gray-200/80">
-                {[10, 25, 50, 100].map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    onClick={() => setMaxResults(num)}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      maxResults === num
-                        ? 'bg-white text-gray-900 shadow-xs'
-                        : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    {num} videos
-                  </button>
-                ))}
+            {/* Filter Selectors: Quantity & Min Views */}
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Quantity Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5 shrink-0">
+                  <SlidersHorizontal size={14} className="text-gray-400" />
+                  Videos to scan:
+                </span>
+                <div className="inline-flex flex-wrap rounded-xl p-1 bg-gray-100 border border-gray-200/80">
+                  {[10, 25, 50, 100].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setMaxResults(num)}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        maxResults === num
+                          ? 'bg-white text-gray-900 shadow-xs'
+                          : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      {num} videos
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Min Views Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5 shrink-0">
+                  <PlaySquare size={14} className="text-gray-400" />
+                  Min. views:
+                </span>
+                <div className="inline-flex flex-wrap rounded-xl p-1 bg-gray-100 border border-gray-200/80">
+                  {[
+                    { label: 'Any', value: 0 },
+                    { label: '5K+', value: 5000 },
+                    { label: '10K+', value: 10000 },
+                    { label: '25K+', value: 25000 },
+                    { label: '50K+', value: 50000 },
+                    { label: '100K+', value: 100000 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setMinViews(preset.value)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        minViews === preset.value
+                          ? 'bg-white text-gray-900 shadow-xs'
+                          : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

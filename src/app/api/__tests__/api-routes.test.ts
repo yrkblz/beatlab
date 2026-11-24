@@ -301,6 +301,67 @@ describe('Backend API Route Handlers', () => {
       expect(json.leads[1].instagram).toBe('gunnamelodies');
     });
 
+    it('filters out videos with viewCount below minViews', async () => {
+      process.env.YOUTUBE_API_KEY = 'test_yt_key';
+
+      global.fetch = jest.fn().mockImplementation((url: string) => {
+        if (url.includes('/search')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              items: [{ id: { videoId: 'vSmall' } }, { id: { videoId: 'vBig' } }],
+            }),
+          });
+        }
+        if (url.includes('/videos')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              items: [
+                {
+                  id: 'vSmall',
+                  snippet: {
+                    channelTitle: 'Small Producer',
+                    title: 'Beat with 500 views',
+                    description: 'Hit me on IG: @smallproducer',
+                  },
+                  statistics: {
+                    viewCount: '500',
+                  },
+                },
+                {
+                  id: 'vBig',
+                  snippet: {
+                    channelTitle: 'Popular Producer',
+                    title: 'Beat with 25000 views',
+                    description: 'Hit me on IG: @popularproducer',
+                  },
+                  statistics: {
+                    viewCount: '25000',
+                  },
+                },
+              ],
+            }),
+          });
+        }
+        return Promise.reject(new Error('Unknown url'));
+      }) as any;
+
+      const req = new Request('http://localhost:3000/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'popular beats', minViews: 10000 }),
+      });
+
+      const res = await leadsHandler(req);
+      const json = await res.json();
+
+      expect(json.leads).toBeDefined();
+      expect(json.leads).toHaveLength(1);
+      expect(json.leads[0].instagram).toBe('popularproducer');
+      expect(json.leads[0].viewCount).toBe(25000);
+    });
+
     it('returns empty array when search returns no videos', async () => {
       process.env.YOUTUBE_API_KEY = 'test_yt_key';
 

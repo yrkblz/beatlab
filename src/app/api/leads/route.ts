@@ -40,6 +40,7 @@ export async function POST(request: Request) {
       pageToken,
       excludeHandles = [],
       excludeChannels = [],
+      minViews = 0,
     } = await request.json();
 
     const apiKey = process.env.YOUTUBE_API_KEY;
@@ -74,9 +75,11 @@ export async function POST(request: Request) {
       const pageSize = Math.min(50, requestedCount - totalVideosScanned);
       const pageParam = currentPageToken ? `&pageToken=${encodeURIComponent(currentPageToken)}` : '';
 
+      const orderParam = minViews > 0 ? 'viewCount' : 'date';
+
       const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=id,snippet&q=${encodeURIComponent(
         query
-      )}&type=video&maxResults=${pageSize}&order=date${pageParam}&key=${apiKey}`;
+      )}&type=video&maxResults=${pageSize}&order=${orderParam}${pageParam}&key=${apiKey}`;
 
       const searchRes = await fetch(searchUrl);
 
@@ -105,7 +108,7 @@ export async function POST(request: Request) {
       for (let i = 0; i < videoIds.length; i += 50) {
         const chunk = videoIds.slice(i, i + 50).join(',');
         const videosRes = await fetch(
-          `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${chunk}&key=${apiKey}`
+          `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${chunk}&key=${apiKey}`
         );
         if (!videosRes.ok) continue;
         const videosData = await videosRes.json();
@@ -142,6 +145,14 @@ export async function POST(request: Request) {
         }
 
         (videosData.items || []).forEach((video: any) => {
+          const rawViewCount = video.statistics?.viewCount;
+          const viewCount = rawViewCount !== undefined ? Number(rawViewCount) : 0;
+
+          // Filter out videos with fewer views than the requested minimum threshold (removes no-names)
+          if (minViews > 0 && viewCount < minViews) {
+            return;
+          }
+
           const channelName = video.snippet?.channelTitle || 'Unknown Artist';
           const channelId = video.snippet?.channelId;
           const channelInfo = channelId ? channelMap[channelId] : null;
@@ -193,6 +204,7 @@ export async function POST(request: Request) {
             email: email || '',
             videoTitle,
             videoUrl,
+            viewCount,
           });
         });
       }

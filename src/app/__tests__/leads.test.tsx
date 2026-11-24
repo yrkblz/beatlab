@@ -94,7 +94,7 @@ describe('LeadsPage (/leads)', () => {
     expect(global.fetch).toHaveBeenCalledWith('/api/leads', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: 'drake type beat', maxResults: 50 }),
+      body: JSON.stringify({ query: 'drake type beat', maxResults: 50, minViews: 10000 }),
     });
 
     await waitFor(() => {
@@ -206,7 +206,28 @@ describe('LeadsPage (/leads)', () => {
     expect(global.fetch).toHaveBeenCalledWith('/api/leads', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: 'metro boomin type beat', maxResults: 25 }),
+      body: JSON.stringify({ query: 'metro boomin type beat', maxResults: 25, minViews: 10000 }),
+    });
+  });
+
+  it('allows changing min views threshold and sends chosen minViews in API request', async () => {
+    render(<LeadsPage />);
+    const input = screen.getByPlaceholderText(/e\.g\. playboi carti type beat/i);
+    fireEvent.change(input, { target: { value: 'travis scott type beat' } });
+
+    // Select 50K+ min views
+    const btn50k = screen.getByRole('button', { name: /50K\+/i });
+    fireEvent.click(btn50k);
+
+    const submitBtn = screen.getByRole('button', { name: /Search Leads/i });
+    await act(async () => {
+      fireEvent.click(submitBtn);
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'travis scott type beat', maxResults: 50, minViews: 50000 }),
     });
   });
 
