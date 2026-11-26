@@ -187,6 +187,9 @@ export default function MailerPage() {
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
+  const [logFilter, setLogFilter] = useState<'all' | 'read' | 'unread'>('all');
+  const [logSortReadFirst, setLogSortReadFirst] = useState<boolean | null>(null);
+  const [logsCopied, setLogsCopied] = useState(false);
 
   // Campaign Selection and Deletion
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
@@ -1771,38 +1774,106 @@ export default function MailerPage() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-0">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-white sticky top-0">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Email Address</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Opened At</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 bg-white">
-                      {selectedCampaign.email_logs?.map((log: any) => (
-                        <tr key={log.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.recipient_email}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            {log.opened ? (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                <Eye size={12} className="mr-1"/> Read
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                Not opened
-                              </span>
+                {(() => {
+                  const allLogs: any[] = selectedCampaign.email_logs || [];
+                  const readCount = allLogs.filter((l: any) => l.opened).length;
+                  const unreadCount = allLogs.length - readCount;
+                  let visibleLogs = allLogs.filter((l: any) =>
+                    logFilter === 'all' ? true : logFilter === 'read' ? l.opened : !l.opened
+                  );
+                  if (logSortReadFirst !== null) {
+                    visibleLogs = [...visibleLogs].sort((a: any, b: any) => {
+                      const diff = Number(Boolean(b.opened)) - Number(Boolean(a.opened));
+                      if (diff !== 0) return logSortReadFirst ? diff : -diff;
+                      return new Date(b.opened_at || 0).getTime() - new Date(a.opened_at || 0).getTime();
+                    });
+                  }
+                  const filterBtn = (key: 'all' | 'read' | 'unread', label: string, count: number) => (
+                    <button
+                      type="button"
+                      onClick={() => setLogFilter(key)}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        logFilter === key ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      {label} <span className="ml-1 text-gray-400">{count}</span>
+                    </button>
+                  );
+                  return (
+                    <>
+                      <div className="px-6 py-3 border-b border-[#d2d2d7] flex flex-wrap items-center justify-between gap-3 bg-white">
+                        <div className="inline-flex rounded-xl p-1 bg-gray-100 border border-gray-200/80" role="group" aria-label="Filter opens">
+                          {filterBtn('all', 'All', allLogs.length)}
+                          {filterBtn('read', 'Read', readCount)}
+                          {filterBtn('unread', 'Not opened', unreadCount)}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={visibleLogs.length === 0}
+                          onClick={() => {
+                            navigator.clipboard?.writeText(visibleLogs.map((l: any) => l.recipient_email).join('\n'));
+                            setLogsCopied(true);
+                            setTimeout(() => setLogsCopied(false), 2000);
+                          }}
+                          className="text-xs font-semibold text-gray-700 bg-white border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          {logsCopied ? <CheckCircle2 size={13} className="text-emerald-600" /> : <CheckSquare size={13} className="text-gray-500" />}
+                          {logsCopied ? 'Copied!' : `Copy ${visibleLogs.length} emails`}
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto p-0">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-white sticky top-0">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Email Address</th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+                                <button
+                                  type="button"
+                                  onClick={() => setLogSortReadFirst(prev => (prev === null ? true : prev ? false : null))}
+                                  className="uppercase inline-flex items-center gap-1 hover:text-black cursor-pointer"
+                                  title="Sort by status"
+                                >
+                                  Status
+                                  <span className="text-[10px]">{logSortReadFirst === null ? '↕' : logSortReadFirst ? '↓ Read' : '↓ Not opened'}</span>
+                                </button>
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Opened At</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 bg-white">
+                            {visibleLogs.length === 0 && (
+                              <tr>
+                                <td colSpan={3} className="px-6 py-10 text-center text-sm text-gray-500">
+                                  {logFilter === 'read' ? 'No one has opened this campaign yet.' : 'No emails match this filter.'}
+                                </td>
+                              </tr>
                             )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {log.opened && log.opened_at ? new Date(log.opened_at).toLocaleString() : '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                            {visibleLogs.map((log: any) => (
+                              <tr key={log.id} className="hover:bg-gray-50">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{log.recipient_email}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                  {log.opened ? (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                      <Eye size={12} className="mr-1"/> Read
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                      Not opened
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                  {log.opened && log.opened_at ? new Date(log.opened_at).toLocaleString() : '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             )}
           </div>
