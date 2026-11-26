@@ -331,4 +331,57 @@ describe('Mailer Page (/mailer) Multi-Tenant Privacy & Isolation', () => {
 
     expect(screen.getByText(/Google Account not connected/i)).toBeInTheDocument();
   });
+
+  it('switches to Auto-Drip (Masowa Wysyłka) tab and renders cloud drip configuration', async () => {
+    localStorage.clear();
+    const mockSession = {
+      user: mockUserA,
+      access_token: 'jwt-123',
+      provider_token: 'google-token-123',
+    };
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: mockSession },
+    });
+    mockOrder.mockResolvedValue({ data: [], error: null });
+
+    const origFetch = global.fetch;
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/api/drip/campaign')) {
+        return Promise.resolve({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify({
+                config: { serviceRole: true, cronSecret: true, googleOAuth: false },
+                credentials: { configured: true, method: 'smtp', senderEmail: mockUserA.email },
+                campaign: null,
+                recent: [],
+              })
+            ),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ files: [] }), text: () => Promise.resolve('{}') });
+    }) as any;
+
+    try {
+      await act(async () => {
+        render(<MailerPage />);
+      });
+
+      const dripTabBtn = screen.getByRole('button', { name: /Auto-Drip \(Masowa Wysyłka\)/i });
+      await act(async () => {
+        fireEvent.click(dripTabBtn);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auto-drip-tab')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText(/Auto-Drip – masowa wysyłka w chmurze/i)).toBeInTheDocument();
+      expect(screen.getByText(/2\. Baza odbiorców \(pliki \.txt\)/i)).toBeInTheDocument();
+      expect(screen.getByText(/3\. Wiadomość \(ze Spintax\)/i)).toBeInTheDocument();
+    } finally {
+      global.fetch = origFetch;
+    }
+  });
 });

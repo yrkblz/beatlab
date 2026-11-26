@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Mail, Send, Users, LogIn, LogOut, Music2, HardDrive, Paperclip, CheckCircle2, BarChart3, Eye, Calendar, Folder, ArrowLeft, Trash2, CheckSquare, Clock, AlertCircle, RefreshCw } from 'lucide-react';
+import { Mail, Send, Users, LogIn, LogOut, Music2, HardDrive, Paperclip, CheckCircle2, BarChart3, Eye, Calendar, Folder, ArrowLeft, Trash2, CheckSquare, Clock, AlertCircle, RefreshCw, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import AutoDripTab from '@/components/mailer/AutoDripTab';
 
 
 export interface ScheduledCampaign {
@@ -123,7 +124,7 @@ function saveCheckpoint(checkpoint: CampaignCheckpoint | null, userId?: string) 
 }
 
 export default function MailerPage() {
-  const [activeTab, setActiveTab] = useState<'send' | 'scheduled' | 'stats'>('send');
+  const [activeTab, setActiveTab] = useState<'send' | 'scheduled' | 'stats' | 'auto-drip'>('send');
   const [scheduledCampaigns, setScheduledCampaigns] = useState<ScheduledCampaign[]>([]);
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
@@ -1056,6 +1057,12 @@ export default function MailerPage() {
         >
           <BarChart3 size={18} className="mr-2" /> Campaign Stats
         </button>
+        <button 
+          onClick={() => setActiveTab('auto-drip')}
+          className={`flex items-center pb-3 px-4 font-medium border-b-2 transition-colors ${activeTab === 'auto-drip' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black'}`}
+        >
+          <Zap size={18} className="mr-2" /> Auto-Drip (Masowa Wysyłka)
+        </button>
       </div>
 
       {activeTab === 'send' && (
@@ -1800,6 +1807,14 @@ export default function MailerPage() {
             )}
           </div>
         </div>
+      )}
+
+      {activeTab === 'auto-drip' && (
+        <AutoDripTab
+          session={session}
+          supabaseBeats={supabaseBeats}
+          driveFiles={driveFiles}
+        />
       )}
 
       {/* Delete confirmation modal */}
