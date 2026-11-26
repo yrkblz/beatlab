@@ -189,7 +189,6 @@ export default function MailerPage() {
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [logFilter, setLogFilter] = useState<'all' | 'read' | 'unread'>('all');
   const [logSortReadFirst, setLogSortReadFirst] = useState<boolean | null>(null);
-  const [logsCopied, setLogsCopied] = useState(false);
 
   // Campaign Selection and Deletion
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
@@ -1757,23 +1756,6 @@ export default function MailerPage() {
                   </button>
                 </div>
 
-                <div className="p-6 bg-gray-50 border-b border-[#d2d2d7] flex space-x-8">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 uppercase">Emails Sent</p>
-                    <p className="text-3xl font-bold text-gray-900">{selectedCampaign.total_sent}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 uppercase">Opened</p>
-                    <p className="text-3xl font-bold text-green-600">{selectedCampaign.email_logs?.filter((l: any) => l.opened).length || 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 uppercase">Open Rate</p>
-                    <p className="text-3xl font-bold text-blue-600">
-                      {selectedCampaign.total_sent > 0 ? Math.round(((selectedCampaign.email_logs?.filter((l: any) => l.opened).length || 0) / selectedCampaign.total_sent) * 100) : 0}%
-                    </p>
-                  </div>
-                </div>
-
                 {(() => {
                   const allLogs: any[] = selectedCampaign.email_logs || [];
                   const readCount = allLogs.filter((l: any) => l.opened).length;
@@ -1788,38 +1770,47 @@ export default function MailerPage() {
                       return new Date(b.opened_at || 0).getTime() - new Date(a.opened_at || 0).getTime();
                     });
                   }
-                  const filterBtn = (key: 'all' | 'read' | 'unread', label: string, count: number) => (
-                    <button
-                      type="button"
-                      onClick={() => setLogFilter(key)}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                        logFilter === key ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
-                      }`}
-                    >
-                      {label} <span className="ml-1 text-gray-400">{count}</span>
-                    </button>
-                  );
+                  const filterBtn = (key: 'all' | 'read' | 'unread', label: string, count: number) => {
+                    const active = logFilter === key;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setLogFilter(key)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 ${
+                          active ? 'bg-black text-white shadow-2xs' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        }`}
+                      >
+                        {key === 'read' && <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-400' : 'bg-emerald-500'}`} />}
+                        <span>{label}</span>
+                        <span className={active ? 'text-gray-300' : 'text-gray-400'}>{count}</span>
+                      </button>
+                    );
+                  };
                   return (
                     <>
-                      <div className="px-6 py-3 border-b border-[#d2d2d7] flex flex-wrap items-center justify-between gap-3 bg-white">
-                        <div className="inline-flex rounded-xl p-1 bg-gray-100 border border-gray-200/80" role="group" aria-label="Filter opens">
+                      <div className="p-6 bg-gray-50 border-b border-[#d2d2d7] flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex flex-wrap items-center gap-8">
+                          <div>
+                            <p className="text-sm font-medium text-gray-500 uppercase">Emails Sent</p>
+                            <p className="text-3xl font-bold text-gray-900">{selectedCampaign.total_sent}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500 uppercase">Opened</p>
+                            <p className="text-3xl font-bold text-green-600">{readCount}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-500 uppercase">Open Rate</p>
+                            <p className="text-3xl font-bold text-blue-600">
+                              {selectedCampaign.total_sent > 0 ? Math.round((readCount / selectedCampaign.total_sent) * 100) : 0}%
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="inline-flex items-center rounded-xl p-1 bg-white border border-[#d2d2d7] shadow-2xs" role="group" aria-label="Filter opens">
                           {filterBtn('all', 'All', allLogs.length)}
                           {filterBtn('read', 'Read', readCount)}
                           {filterBtn('unread', 'Not opened', unreadCount)}
                         </div>
-                        <button
-                          type="button"
-                          disabled={visibleLogs.length === 0}
-                          onClick={() => {
-                            navigator.clipboard?.writeText(visibleLogs.map((l: any) => l.recipient_email).join('\n'));
-                            setLogsCopied(true);
-                            setTimeout(() => setLogsCopied(false), 2000);
-                          }}
-                          className="text-xs font-semibold text-gray-700 bg-white border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                        >
-                          {logsCopied ? <CheckCircle2 size={13} className="text-emerald-600" /> : <CheckSquare size={13} className="text-gray-500" />}
-                          {logsCopied ? 'Copied!' : `Copy ${visibleLogs.length} emails`}
-                        </button>
                       </div>
 
                       <div className="flex-1 overflow-y-auto p-0">

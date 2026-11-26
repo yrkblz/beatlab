@@ -384,4 +384,75 @@ describe('Mailer Page (/mailer) Multi-Tenant Privacy & Isolation', () => {
       global.fetch = origFetch;
     }
   });
+
+  it('filters and sorts campaign stats email logs by Read / Not opened without copy button', async () => {
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: mockSessionA },
+    });
+
+    const camp = [
+      {
+        id: 'camp-filter-1',
+        subject: 'Filter Test Pack',
+        total_sent: 3,
+        created_at: new Date().toISOString(),
+        user_id: mockUserA.id,
+        email_logs: [
+          { id: 'l1', recipient_email: 'unread1@gmail.com', opened: false, opened_at: null },
+          { id: 'l2', recipient_email: 'read1@gmail.com', opened: true, opened_at: '2026-11-26T14:27:04Z' },
+          { id: 'l3', recipient_email: 'unread2@gmail.com', opened: false, opened_at: null },
+        ],
+      },
+    ];
+
+    mockOrder.mockResolvedValue({ data: camp, error: null });
+
+    await act(async () => {
+      render(<MailerPage />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Campaign Stats/i));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Filter Test Pack')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Filter Test Pack'));
+    });
+
+    expect(screen.getByText('read1@gmail.com')).toBeInTheDocument();
+    expect(screen.getByText('unread1@gmail.com')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Copy .* emails/i })).not.toBeInTheDocument();
+
+    const filterGroup = screen.getByRole('group', { name: /Filter opens/i });
+    const buttons = filterGroup.querySelectorAll('button');
+
+    // Read only
+    await act(async () => {
+      fireEvent.click(buttons[1]);
+    });
+    expect(screen.getByText('read1@gmail.com')).toBeInTheDocument();
+    expect(screen.queryByText('unread1@gmail.com')).not.toBeInTheDocument();
+
+    // Not opened only
+    await act(async () => {
+      fireEvent.click(buttons[2]);
+    });
+    expect(screen.queryByText('read1@gmail.com')).not.toBeInTheDocument();
+    expect(screen.getByText('unread1@gmail.com')).toBeInTheDocument();
+    expect(screen.getByText('unread2@gmail.com')).toBeInTheDocument();
+
+    // All + sort Read first
+    await act(async () => {
+      fireEvent.click(buttons[0]);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Status/i }));
+    });
+    const rows = document.querySelectorAll('tbody tr');
+    expect(rows[0]).toHaveTextContent('read1@gmail.com');
+  });
 });
