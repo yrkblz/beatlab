@@ -1776,13 +1776,12 @@ export default function MailerPage() {
                       <button
                         type="button"
                         onClick={() => setLogFilter(key)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 ${
-                          active ? 'bg-black text-white shadow-2xs' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 ${
+                          active ? 'bg-white text-gray-900 shadow-2xs' : 'text-gray-500 hover:text-gray-800'
                         }`}
                       >
-                        {key === 'read' && <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-400' : 'bg-emerald-500'}`} />}
                         <span>{label}</span>
-                        <span className={active ? 'text-gray-300' : 'text-gray-400'}>{count}</span>
+                        <span className={`tabular-nums ${active ? 'text-gray-500' : 'text-gray-400'}`}>{count}</span>
                       </button>
                     );
                   };
@@ -1806,7 +1805,7 @@ export default function MailerPage() {
                           </div>
                         </div>
 
-                        <div className="inline-flex items-center rounded-xl p-1 bg-white border border-[#d2d2d7] shadow-2xs" role="group" aria-label="Filter opens">
+                        <div className="inline-flex items-center rounded-lg p-0.5 bg-gray-200/60" role="group" aria-label="Filter opens">
                           {filterBtn('all', 'All', allLogs.length)}
                           {filterBtn('read', 'Read', readCount)}
                           {filterBtn('unread', 'Not opened', unreadCount)}
