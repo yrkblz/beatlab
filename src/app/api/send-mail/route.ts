@@ -80,12 +80,21 @@ export async function POST(request: Request) {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
-    // Use service role key if available, otherwise authenticated user JWT, fallback to anon key
-    const authHeaderFromReq = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    // Use service role key if available (must be set in BOTH apikey and Authorization for sb_secret_ keys),
+    // otherwise authenticated user JWT with anon apikey, fallback to anon key.
+    const authHeaderFromReq = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')?.trim();
     const userAuthToken = userToken || authHeaderFromReq;
-    const authBearer = supabaseServiceKey || userAuthToken || supabaseAnonKey;
+    let activeApiKey = supabaseServiceKey || supabaseAnonKey;
+    let authBearer = supabaseServiceKey || userAuthToken || supabaseAnonKey;
+
+    const buildSupabaseHeaders = (apiKey: string, bearer: string) => ({
+      'apikey': apiKey,
+      'Authorization': `Bearer ${bearer}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    });
 
     let campaignId = incomingCampaignId;
 
@@ -101,16 +110,11 @@ export async function POST(request: Request) {
 
       let campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
         method: 'POST',
-        headers: {
-          'apikey': supabaseAnonKey,
-          'Authorization': `Bearer ${authBearer}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation'
-        },
+        headers: buildSupabaseHeaders(activeApiKey, authBearer),
         body: JSON.stringify(campaignBody)
       });
       
-      const campaignText = await campaignRes.text();
+      let campaignText = await campaignRes.text();
       let campaignData: any;
       try {
         campaignData = JSON.parse(campaignText);
@@ -118,16 +122,28 @@ export async function POST(request: Request) {
         campaignData = null;
       }
 
+      // Fallback to user JWT + anon key if service key was rejected (e.g. non-JWT / key mismatch)
+      if (!campaignRes.ok && supabaseServiceKey && (userAuthToken || supabaseAnonKey)) {
+        activeApiKey = supabaseAnonKey;
+        authBearer = userAuthToken || supabaseAnonKey;
+        campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
+          method: 'POST',
+          headers: buildSupabaseHeaders(activeApiKey, authBearer),
+          body: JSON.stringify(campaignBody)
+        });
+        campaignText = await campaignRes.text();
+        try {
+          campaignData = JSON.parse(campaignText);
+        } catch {
+          campaignData = null;
+        }
+      }
+
       // Graceful fallback if user_id column has not yet been added to Supabase table
       if (!campaignRes.ok && campaignData?.message?.includes('user_id')) {
         campaignRes = await fetch(`${supabaseUrl}/rest/v1/campaigns`, {
           method: 'POST',
-          headers: {
-            'apikey': supabaseAnonKey,
-            'Authorization': `Bearer ${authBearer}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
+          headers: buildSupabaseHeaders(activeApiKey, authBearer),
           body: JSON.stringify({ subject: campaignName || subject || 'Campaign', total_sent: totalRecipients || emails.length })
         });
         const retryText = await campaignRes.text();
@@ -194,12 +210,7 @@ export async function POST(request: Request) {
       try {
         const logRes = await fetch(`${supabaseUrl}/rest/v1/email_logs`, {
           method: 'POST',
-          headers: {
-            'apikey': supabaseAnonKey,
-            'Authorization': `Bearer ${authBearer}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
+          headers: buildSupabaseHeaders(activeApiKey, authBearer),
           body: JSON.stringify({ campaign_id: campaignId, recipient_email: email })
         });
         const logText = await logRes.text();

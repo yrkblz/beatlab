@@ -177,4 +177,49 @@ describe('POST /api/send-mail', () => {
       })
     );
   });
+
+  it('pairs sb_secret_ SUPABASE_SERVICE_ROLE_KEY in both apikey and Authorization headers and falls back cleanly on JWT error', async () => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_test_123';
+    let firstCampaignCall = true;
+    global.fetch = jest.fn(async (url: any, init: any) => {
+      if (typeof url === 'string' && url.includes('/rest/v1/campaigns')) {
+        if (firstCampaignCall) {
+          firstCampaignCall = false;
+          expect(init.headers.apikey).toBe('sb_secret_test_123');
+          expect(init.headers.Authorization).toBe('Bearer sb_secret_test_123');
+          return new Response(JSON.stringify({ message: 'Expected 3 parts in JWT; got 1' }), { status: 401 });
+        }
+        expect(init.headers.apikey).toBe('fake-anon-key');
+        expect(init.headers.Authorization).toBe('Bearer user.jwt.token');
+        return new Response(JSON.stringify([{ id: 'camp-fallback-1' }]), { status: 201 });
+      }
+      if (typeof url === 'string' && url.includes('/rest/v1/email_logs')) {
+        return new Response(JSON.stringify([{ id: 'log-1' }]), { status: 201 });
+      }
+      if (typeof url === 'string' && url.includes('gmail.googleapis.com')) {
+        return new Response(JSON.stringify({ id: 'msg-1' }), { status: 200 });
+      }
+      return new Response('{}', { status: 200 });
+    }) as any;
+
+    try {
+      const req = new Request('http://localhost:3000/api/send-mail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer user.jwt.token' },
+        body: JSON.stringify({
+          accessToken: 'valid-token',
+          emails: ['Michiganmuzic1@gmail.com'],
+          subject: 'Test',
+          message: 'Hello',
+        }),
+      });
+      const res = await sendMailHandler(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.campaignId).toBe('camp-fallback-1');
+    } finally {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    }
+  });
 });
