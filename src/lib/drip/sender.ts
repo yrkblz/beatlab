@@ -97,18 +97,56 @@ function createMime(to: string, from: string, subject: string, html: string): st
   return base64Url(headers.join('\r\n') + '\r\n\r\n' + Buffer.from(html, 'utf-8').toString('base64'));
 }
 
-async function sendViaGmailApi(cred: DripCredential, msg: DripMessage): Promise<void> {
-  const accessToken = await refreshGoogleAccessToken(cred.secret);
-  let res: Response;
+function parseOAuthSecret(secret: string): { accessToken?: string; refreshToken?: string } {
+  const trimmed = (secret || '').trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return {
+        accessToken: typeof parsed.accessToken === 'string' ? parsed.accessToken.trim() : undefined,
+        refreshToken: typeof parsed.refreshToken === 'string' ? parsed.refreshToken.trim() : undefined,
+      };
+    } catch {}
+  }
+  return { refreshToken: trimmed, accessToken: trimmed };
+}
+
+async function dispatchGmailRaw(accessToken: string, raw: string): Promise<Response> {
   try {
-    res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    return await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw: createMime(msg.to, cred.senderEmail, msg.subject, msg.html) }),
+      body: JSON.stringify({ raw }),
     });
   } catch (err: any) {
     throw new DripSendError('transient', `Błąd sieci Gmail API: ${err?.message || ''}`);
   }
+}
+
+async function sendViaGmailApi(cred: DripCredential, msg: DripMessage): Promise<void> {
+  const { accessToken: storedAccess, refreshToken } = parseOAuthSecret(cred.secret);
+  const canRefresh = Boolean(refreshToken && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  const raw = createMime(msg.to, cred.senderEmail, msg.subject, msg.html);
+
+  let activeToken = storedAccess || '';
+  if (!activeToken && canRefresh && refreshToken) {
+    activeToken = await refreshGoogleAccessToken(refreshToken);
+  }
+  if (!activeToken) {
+    throw new DripSendError(
+      'auth',
+      'Token Google wygasł. Kliknij „Connect Google” w Mailerze, aby odświeżyć token, lub zapisz 16-znakowe Hasło aplikacji Google.'
+    );
+  }
+
+  let res = await dispatchGmailRaw(activeToken, raw);
+
+  // If stored access_token expired (401) and we have refresh credentials, refresh and retry once
+  if (res.status === 401 && canRefresh && refreshToken) {
+    activeToken = await refreshGoogleAccessToken(refreshToken);
+    res = await dispatchGmailRaw(activeToken, raw);
+  }
+
   if (res.ok) return;
   const text = await res.text().catch(() => '');
   let detail = text;
@@ -117,7 +155,10 @@ async function sendViaGmailApi(cred: DripCredential, msg: DripMessage): Promise<
   } catch {}
   const lower = detail.toLowerCase();
   if (res.status === 401 || (res.status === 403 && /insufficient|scope|permission/.test(lower))) {
-    throw new DripSendError('auth', `Gmail API odmówił dostępu: ${detail.slice(0, 160)}`);
+    throw new DripSendError(
+      'auth',
+      'Sesja tokena Google wygasła (token OAuth bez GOOGLE_CLIENT_SECRET jest ważny 1h). Kliknij „Connect Google” albo wpisz 16-znakowe Hasło aplikacji Google (działa 24/7 bez wygasania).'
+    );
   }
   if (res.status === 429 || /quota|rate limit|limit exceeded/.test(lower)) {
     throw new DripSendError('quota', 'Google: przekroczono dzienny limit wysyłki Gmail. Silnik wznowi wysyłkę jutro.');

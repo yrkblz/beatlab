@@ -155,19 +155,71 @@ export default function MailerPage() {
   const [supabaseBeats, setSupabaseBeats] = useState<any[]>([]);
   const [selectedAttachments, setSelectedAttachments] = useState<{name: string, link: string}[]>([]);
   
-  // Google Drive
+  // Google Drive & OAuth tokens
   const [googleToken, setGoogleToken] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('beatlab_google_provider_token');
     }
     return null;
   });
+  const [googleRefreshToken, setGoogleRefreshToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('beatlab_google_provider_refresh_token');
+    }
+    return null;
+  });
+  const [savedDripSender, setSavedDripSender] = useState<{
+    configured: boolean;
+    method?: string;
+    senderEmail?: string;
+  } | null>(null);
   const [driveFiles, setDriveFiles] = useState<any[]>([]);
   const [loadingDrive, setLoadingDrive] = useState(false);
   const [driveError, setDriveError] = useState<string | null>(null);
   const [driveHistory, setDriveHistory] = useState<{id: string, name: string}[]>([{id: 'root', name: 'My Drive'}]);
 
   const effectiveGoogleToken = session?.provider_token || googleToken;
+  const effectiveGoogleRefreshToken = session?.provider_refresh_token || googleRefreshToken;
+  const canSendMail = Boolean(effectiveGoogleToken || savedDripSender?.configured);
+
+  async function syncAndLoadDripSender(
+    userSession: any,
+    oauthAccess?: string | null,
+    oauthRefresh?: string | null
+  ) {
+    const jwt = userSession?.access_token;
+    if (!jwt) return;
+    try {
+      const res = await fetch('/api/drip/credentials', {
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      if (!res || !res.ok || typeof res.json !== 'function') return;
+      const data = await res.json();
+      if (data && typeof data.configured === 'boolean') {
+        setSavedDripSender(data);
+        // Auto-save Google OAuth token into drip_credentials if user connected Google and hasn't configured SMTP yet
+        if ((!data.configured || data.method === 'oauth') && oauthAccess && userSession?.user?.email) {
+          const saveRes = await fetch('/api/drip/credentials', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${jwt}`,
+            },
+            body: JSON.stringify({
+              method: 'oauth',
+              senderEmail: userSession.user.email,
+              accessToken: oauthAccess,
+              refreshToken: oauthRefresh || '',
+            }),
+          });
+          if (saveRes && saveRes.ok && typeof saveRes.json === 'function') {
+            const saved = await saveRes.json();
+            if (saved?.configured) setSavedDripSender(saved);
+          }
+        }
+      }
+    } catch {}
+  }
 
   async function reconnectGoogleDrive() {
     const redirectUrl = typeof window !== 'undefined'
@@ -204,9 +256,14 @@ export default function MailerPage() {
       try {
         const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
         const pToken = hashParams.get('provider_token');
+        const pRefresh = hashParams.get('provider_refresh_token');
         if (pToken) {
           setGoogleToken(pToken);
           localStorage.setItem('beatlab_google_provider_token', pToken);
+        }
+        if (pRefresh) {
+          setGoogleRefreshToken(pRefresh);
+          localStorage.setItem('beatlab_google_provider_refresh_token', pRefresh);
         }
       } catch (e) {
         console.error('Error parsing OAuth hash token:', e);
@@ -225,9 +282,20 @@ export default function MailerPage() {
         token = localStorage.getItem('beatlab_google_provider_token');
       }
 
+      let rToken = session?.provider_refresh_token;
+      if (rToken) {
+        setGoogleRefreshToken(rToken);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('beatlab_google_provider_refresh_token', rToken);
+        }
+      } else if (typeof window !== 'undefined') {
+        rToken = localStorage.getItem('beatlab_google_provider_refresh_token');
+      }
+
       if (session?.user) {
         loadSupabaseBeats(session.user.id);
         setScheduledCampaigns(loadScheduledCampaigns(session.user.id));
+        syncAndLoadDripSender(session, token, rToken);
         if (token) loadDriveFiles(token, 'root');
         if (activeTab === 'stats') {
           fetchCampaignStats(session.user.id);
@@ -240,8 +308,11 @@ export default function MailerPage() {
       if (event === 'SIGNED_OUT') {
         if (typeof window !== 'undefined') {
           localStorage.removeItem('beatlab_google_provider_token');
+          localStorage.removeItem('beatlab_google_provider_refresh_token');
         }
         setGoogleToken(null);
+        setGoogleRefreshToken(null);
+        setSavedDripSender(null);
         setCampaigns([]);
         setSupabaseBeats([]);
         return;
@@ -257,8 +328,19 @@ export default function MailerPage() {
         token = localStorage.getItem('beatlab_google_provider_token');
       }
 
+      let rToken = session?.provider_refresh_token;
+      if (rToken) {
+        setGoogleRefreshToken(rToken);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('beatlab_google_provider_refresh_token', rToken);
+        }
+      } else if (typeof window !== 'undefined') {
+        rToken = localStorage.getItem('beatlab_google_provider_refresh_token');
+      }
+
       if (session?.user) {
         loadSupabaseBeats(session.user.id);
+        syncAndLoadDripSender(session, token, rToken);
         if (token) loadDriveFiles(token, 'root');
         if (activeTab === 'stats') {
           fetchCampaignStats(session.user.id);
@@ -615,7 +697,7 @@ export default function MailerPage() {
     campaignId?: string;
   }> {
     const token = effectiveGoogleToken;
-    if (!token) {
+    if (!token && !savedDripSender?.configured) {
       return { 
         success: false, 
         error: 'Google account not connected. Please connect your Google account to send emails.',
@@ -760,7 +842,7 @@ export default function MailerPage() {
 
   // Automatic Background Worker for Scheduled Campaigns
   useEffect(() => {
-    if (!effectiveGoogleToken || !session?.user?.id) return;
+    if (!canSendMail || !session?.user?.id) return;
 
     const timer = setInterval(async () => {
       const stored = loadScheduledCampaigns(session.user.id);
@@ -797,11 +879,11 @@ export default function MailerPage() {
     }, 5000);
 
     return () => clearInterval(timer);
-  }, [effectiveGoogleToken, session?.user?.id]);
+  }, [canSendMail, effectiveGoogleToken, session?.user?.id]);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!effectiveGoogleToken) {
+    if (!canSendMail) {
       await reconnectGoogleDrive();
       return;
     }
@@ -1070,7 +1152,7 @@ export default function MailerPage() {
       {activeTab === 'send' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-7 bg-white border border-[#d2d2d7] rounded-xl p-6 shadow-sm">
-            {!effectiveGoogleToken && (
+            {!effectiveGoogleToken && !savedDripSender?.configured && (
               <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-amber-100 text-amber-700 rounded-lg shrink-0">
@@ -1088,6 +1170,25 @@ export default function MailerPage() {
                 >
                   <HardDrive size={14} />
                   <span>Connect Google</span>
+                </button>
+              </div>
+            )}
+            {!effectiveGoogleToken && savedDripSender?.configured && (
+              <div className="mb-6 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 text-xs text-emerald-800">
+                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                  <span>
+                    Wysyłka aktywna przez zapisane konto: <strong>{savedDripSender.senderEmail}</strong>{' '}
+                    ({savedDripSender.method === 'oauth' ? 'Token Google' : 'Hasło aplikacji 24/7'})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={reconnectGoogleDrive}
+                  className="shrink-0 px-3 py-1.5 bg-white hover:bg-emerald-100/50 text-emerald-900 border border-emerald-300 text-xs font-medium rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <HardDrive size={13} />
+                  <span>Connect Google Drive</span>
                 </button>
               </div>
             )}
@@ -1342,14 +1443,14 @@ export default function MailerPage() {
                   type="submit" 
                   disabled={sending} 
                   className={`w-full flex items-center justify-center font-medium py-3 px-4 rounded-lg text-sm transition-colors disabled:opacity-50 cursor-pointer ${
-                    !effectiveGoogleToken
+                    !canSendMail
                       ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
                       : isScheduled 
                         ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' 
                         : 'bg-black hover:bg-gray-800 text-white'
                   }`}
                 >
-                  {!effectiveGoogleToken ? (
+                  {!canSendMail ? (
                     <>
                       <Mail size={18} className="mr-2" />
                       <span>Connect Google Account to Send</span>
@@ -1875,6 +1976,10 @@ export default function MailerPage() {
           session={session}
           supabaseBeats={supabaseBeats}
           driveFiles={driveFiles}
+          googleToken={effectiveGoogleToken}
+          googleRefreshToken={effectiveGoogleRefreshToken}
+          onConnectGoogle={reconnectGoogleDrive}
+          onCredentialsChange={() => syncAndLoadDripSender(session, effectiveGoogleToken, effectiveGoogleRefreshToken)}
         />
       )}
 

@@ -43,6 +43,10 @@ interface Props {
   session: any;
   supabaseBeats: any[];
   driveFiles: any[];
+  googleToken?: string | null;
+  googleRefreshToken?: string | null;
+  onConnectGoogle?: () => void;
+  onCredentialsChange?: () => void;
 }
 
 const ACTIVE = ['running', 'paused', 'error'];
@@ -101,7 +105,15 @@ const toneClasses: Record<string, string> = {
   blue: 'bg-blue-50 border-blue-200 text-blue-800',
 };
 
-export default function AutoDripTab({ session, supabaseBeats, driveFiles }: Props) {
+export default function AutoDripTab({
+  session,
+  supabaseBeats,
+  driveFiles,
+  googleToken,
+  googleRefreshToken,
+  onConnectGoogle,
+  onCredentialsChange,
+}: Props) {
   const [status, setStatus] = useState<DripStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [error, setError] = useState('');
@@ -237,6 +249,7 @@ export default function AutoDripTab({ session, supabaseBeats, driveFiles }: Prop
       setEditingCred(false);
       setNotice('Konto nadawcy zweryfikowane i zapisane. Silnik w chmurze może teraz wysyłać bez Twojego komputera.');
       await loadStatus();
+      onCredentialsChange?.();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -245,9 +258,14 @@ export default function AutoDripTab({ session, supabaseBeats, driveFiles }: Prop
   }
 
   async function saveOAuthCredentials() {
-    const refreshToken = session?.provider_refresh_token;
-    if (!refreshToken) {
-      setError('Brak refresh tokenu Google w tej sesji. Kliknij „Połącz ponownie konto Google” w zakładce Send Pack i spróbuj od razu po zalogowaniu – albo użyj Hasła aplikacji (zalecane).');
+    const accessToken = googleToken || session?.provider_token || '';
+    const refreshToken = googleRefreshToken || session?.provider_refresh_token || '';
+    if (!accessToken && !refreshToken) {
+      if (onConnectGoogle) {
+        onConnectGoogle();
+        return;
+      }
+      setError('Brak tokenu Google w tej sesji. Kliknij „Połącz konto Google”, aby zalogować się przez Google.');
       return;
     }
     setSavingCred(true);
@@ -255,11 +273,17 @@ export default function AutoDripTab({ session, supabaseBeats, driveFiles }: Prop
     try {
       await api('/api/drip/credentials', {
         method: 'POST',
-        body: JSON.stringify({ method: 'oauth', senderEmail: session?.user?.email, refreshToken }),
+        body: JSON.stringify({
+          method: 'oauth',
+          senderEmail: session?.user?.email || credEmail,
+          accessToken,
+          refreshToken,
+        }),
       });
       setEditingCred(false);
-      setNotice('Połączono konto Google (OAuth) dla silnika w chmurze.');
+      setNotice('Połączono konto Google (Token OAuth). Zarówno Send Pack, jak i Auto-Drip korzystają teraz z tego tokena.');
       await loadStatus();
+      onCredentialsChange?.();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -272,6 +296,7 @@ export default function AutoDripTab({ session, supabaseBeats, driveFiles }: Prop
     try {
       await api('/api/drip/credentials', { method: 'DELETE' });
       await loadStatus();
+      onCredentialsChange?.();
     } catch (e: any) {
       setError(e.message);
     }
@@ -490,18 +515,19 @@ export default function AutoDripTab({ session, supabaseBeats, driveFiles }: Prop
                 className="px-4 py-2 text-sm font-medium bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
               >
                 {savingCred ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
-                Zapisz i zweryfikuj
+                Zapisz Hasło aplikacji
               </button>
-              {status?.config.googleOAuth && (
-                <button
-                  type="button"
-                  disabled={savingCred}
-                  onClick={saveOAuthCredentials}
-                  className="px-4 py-2 text-sm font-medium bg-white border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer"
-                >
-                  Użyj zalogowanego konta Google (OAuth)
-                </button>
-              )}
+              <button
+                type="button"
+                disabled={savingCred}
+                onClick={saveOAuthCredentials}
+                className="px-4 py-2 text-sm font-medium bg-white border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer flex items-center gap-1.5"
+              >
+                <HardDrive size={14} />
+                {googleToken || session?.provider_token
+                  ? `Użyj tokena Google (${session?.user?.email || 'połączone'})`
+                  : 'Połącz konto Google (Token OAuth)'}
+              </button>
               {editingCred && (
                 <button type="button" onClick={() => setEditingCred(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-black cursor-pointer">
                   Anuluj

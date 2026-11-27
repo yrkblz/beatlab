@@ -69,18 +69,24 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: msg }, { status: 400 });
       }
     } else {
-      secret = String(body?.refreshToken || '').trim();
-      if (!secret) {
+      const refreshToken = String(body?.refreshToken || '').trim();
+      let accessToken = String(body?.accessToken || '').trim();
+      if (!refreshToken && !accessToken) {
         return NextResponse.json(
-          { error: 'Brak refresh tokenu Google. Połącz ponownie konto Google lub użyj Hasła aplikacji.' },
+          { error: 'Brak tokenu Google. Kliknij „Połącz konto Google”, aby pobrać token OAuth, lub użyj Hasła aplikacji.' },
           { status: 400 }
         );
       }
-      try {
-        await refreshGoogleAccessToken(secret);
-      } catch (err: any) {
-        return NextResponse.json({ error: err?.message || 'Nieprawidłowy token Google.' }, { status: 400 });
+      if (refreshToken && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+        try {
+          accessToken = await refreshGoogleAccessToken(refreshToken);
+        } catch (err: any) {
+          if (!accessToken) {
+            return NextResponse.json({ error: err?.message || 'Nieprawidłowy token Google.' }, { status: 400 });
+          }
+        }
       }
+      secret = JSON.stringify({ accessToken, refreshToken });
     }
 
     const { error } = await admin.from('drip_credentials').upsert(

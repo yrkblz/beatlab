@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { getAdminClient, isServiceRoleConfigured } from '@/lib/drip/admin';
+import { decryptSecret } from '@/lib/drip/crypto';
+import { sendDripEmail, type DripCredential } from '@/lib/drip/sender';
 
 export const maxDuration = 60;
 
@@ -70,10 +73,6 @@ export async function POST(request: Request) {
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const origin = `${protocol}://${host}`;
 
-    if (!accessToken) {
-      return NextResponse.json({ error: 'Missing Google access token. Please reconnect your Google account.' }, { status: 401 });
-    }
-
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
       return NextResponse.json({ error: 'Please provide at least one recipient email.' }, { status: 400 });
     }
@@ -86,6 +85,30 @@ export async function POST(request: Request) {
     // otherwise authenticated user JWT with anon apikey, fallback to anon key.
     const authHeaderFromReq = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')?.trim();
     const userAuthToken = userToken || authHeaderFromReq;
+
+    // Look up saved server credentials (drip_credentials: App Password or saved OAuth token) as automatic fallback
+    let fallbackDripCred: DripCredential | null = null;
+    if (userId && isServiceRoleConfigured()) {
+      try {
+        const admin = getAdminClient();
+        const { data: credRow } = await admin
+          .from('drip_credentials')
+          .select('method, sender_email, secret_encrypted')
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (credRow?.secret_encrypted) {
+          fallbackDripCred = {
+            method: credRow.method,
+            senderEmail: credRow.sender_email,
+            secret: decryptSecret(credRow.secret_encrypted),
+          };
+        }
+      } catch {}
+    }
+
+    if (!accessToken && !fallbackDripCred) {
+      return NextResponse.json({ error: 'Missing Google access token. Please reconnect your Google account.' }, { status: 401 });
+    }
     let activeApiKey = supabaseServiceKey || supabaseAnonKey;
     let authBearer = supabaseServiceKey || userAuthToken || supabaseAnonKey;
 
@@ -231,7 +254,13 @@ export async function POST(request: Request) {
         </div>
       `;
 
-      const rawMessage = createMimeMessage(email, senderEmail, subject, htmlMessage);
+      const effectiveSender = senderEmail || fallbackDripCred?.senderEmail || '';
+      const rawMessage = createMimeMessage(email, effectiveSender, subject, htmlMessage);
+
+      if (!accessToken && fallbackDripCred) {
+        await sendDripEmail(fallbackDripCred, { to: email, subject, html: htmlMessage });
+        continue;
+      }
 
       const gmailRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
         method: 'POST',
@@ -243,6 +272,11 @@ export async function POST(request: Request) {
       });
 
       if (!gmailRes.ok) {
+        // If browser 1h OAuth token expired (401) and user has saved credentials in drip_credentials, use them seamlessly
+        if (gmailRes.status === 401 && fallbackDripCred) {
+          await sendDripEmail(fallbackDripCred, { to: email, subject, html: htmlMessage });
+          continue;
+        }
         const errorText = await gmailRes.text().catch(() => '');
         let parsedError = errorText;
         try {
