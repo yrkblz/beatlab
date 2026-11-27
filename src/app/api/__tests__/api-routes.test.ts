@@ -362,6 +362,54 @@ describe('Backend API Route Handlers', () => {
       expect(json.leads[0].viewCount).toBe(25000);
     });
 
+    it('does not false-match "ig" inside words like "exclusive rights" and extracts the real @palecloud handle', async () => {
+      process.env.YOUTUBE_API_KEY = 'test_yt_key';
+
+      global.fetch = jest.fn().mockImplementation((url: string) => {
+        if (url.includes('/search')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              items: [{ id: { videoId: 'vPale' } }],
+            }),
+          });
+        }
+        if (url.includes('/videos')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              items: [
+                {
+                  id: 'vPale',
+                  snippet: {
+                    channelTitle: '1080PALE',
+                    title: '(FREE) Drake Type Beat - "Poetry Pt. II"',
+                    description:
+                      'If you have any questions about leases or exclusive rights email me !\n\nPlease contact me :\nEmail: palestreet67@gmail.com\nTwitter: @palestreet\nInstagram: @palecloud (help me hit 5k)',
+                  },
+                  statistics: { viewCount: '50000' },
+                },
+              ],
+            }),
+          });
+        }
+        return Promise.reject(new Error('Unknown url'));
+      }) as any;
+
+      const req = new Request('http://localhost:3000/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'drake type beat' }),
+      });
+
+      const res = await leadsHandler(req);
+      const json = await res.json();
+
+      expect(json.leads).toHaveLength(1);
+      expect(json.leads[0].instagram).toBe('palecloud');
+      expect(json.leads[0].email).toBe('palestreet67@gmail.com');
+    });
+
     it('returns empty array when search returns no videos', async () => {
       process.env.YOUTUBE_API_KEY = 'test_yt_key';
 

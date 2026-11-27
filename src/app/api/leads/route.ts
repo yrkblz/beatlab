@@ -1,18 +1,74 @@
 import { NextResponse } from 'next/server';
 
+const IG_RESERVED_PATHS = new Set([
+  'p',
+  'reel',
+  'reels',
+  'stories',
+  'explore',
+  'channel',
+  'tv',
+  'accounts',
+  'direct',
+  'about',
+  'legal',
+  'privacy',
+]);
+
+const IG_STOPWORDS = new Set([
+  'none',
+  'null',
+  'n/a',
+  'soon',
+  'coming',
+  'here',
+  'link',
+  'below',
+  'me',
+  'my',
+  'follow',
+  'dm',
+]);
+
+function cleanIgHandle(raw: string): string | null {
+  // Instagram handles only allow letters, digits, periods and underscores (no hyphens, no trailing dots)
+  const handle = (raw || '').replace(/^\.+|\.+$/g, '').trim();
+  if (handle.length < 2 || handle.length > 30) return null;
+  if (!/^[a-zA-Z0-9_.]+$/.test(handle)) return null;
+  const lower = handle.toLowerCase();
+  if (IG_RESERVED_PATHS.has(lower) || IG_STOPWORDS.has(lower)) return null;
+  return handle;
+}
+
 // Function extracting Instagram handle or link from text
 function extractInstagram(description: string): string | null {
   if (!description) return null;
 
-  // Search for instagram.com/username links
-  const linkMatch = description.match(/instagram\.com\/([a-zA-Z0-9_.-]+)/i);
-  if (linkMatch && !['p', 'reel', 'stories', 'explore', 'channel'].includes(linkMatch[1].toLowerCase())) {
-    return linkMatch[1];
+  // 1. Search for explicit instagram.com/username or instagr.am/username links
+  const linkRegex = /(?:https?:\/\/)?(?:www\.)?(?:instagram\.com|instagr\.am)\/([a-zA-Z0-9_.]{2,30})/gi;
+  let linkMatch: RegExpExecArray | null;
+  while ((linkMatch = linkRegex.exec(description)) !== null) {
+    const cleaned = cleanIgHandle(linkMatch[1]);
+    if (cleaned) return cleaned;
   }
 
-  // Search for patterns like "IG: name", "Insta: @name", "ig - @name", "@name on ig"
-  const textMatch = description.match(/(?:ig|insta|instagram)[\s]*[:-]*[\s]*@?([a-zA-Z0-9_.-]{3,30})/i);
-  if (textMatch && textMatch[1].length > 2) return textMatch[1];
+  // 2. Search for explicit labels like "Instagram: @palecloud", "IG: name", "Insta - @name", "IG @name"
+  // Strict word boundaries prevent matching "ig" inside words like "rights" ("r-ig-hts") or "night", or "insta" inside "instant".
+  const labelRegex =
+    /(?:^|[\s([{|,;])(?:instagram|insta|ig)\b(?:[\s]*[:=\-/|]+[\s]*@?|[\s]+@)([a-zA-Z0-9_.]{2,30})/gi;
+  let labelMatch: RegExpExecArray | null;
+  while ((labelMatch = labelRegex.exec(description)) !== null) {
+    const cleaned = cleanIgHandle(labelMatch[1]);
+    if (cleaned) return cleaned;
+  }
+
+  // 3. Fallback: "IG: name" with space only when written with @ or uppercase "IG username" on its own line
+  const lineRegex = /(?:^|\r?\n)[\s]*(?:instagram|insta|ig)\b[\s]+@?([a-zA-Z0-9_.]{3,30})(?=$|\s|[)\]}|,;])/im;
+  const lineMatch = description.match(lineRegex);
+  if (lineMatch) {
+    const cleaned = cleanIgHandle(lineMatch[1]);
+    if (cleaned) return cleaned;
+  }
 
   return null;
 }
